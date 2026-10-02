@@ -241,6 +241,31 @@ export type OrderStatus =
 
 export type OrderType = 'dine-in' | 'takeaway' | 'delivery';
 
+/** Fulfilment progress for delivery orders; financial order status stays separate. */
+export type DeliveryStatus =
+  | 'pending'
+  | 'confirmed'
+  | 'preparing'
+  | 'ready-for-delivery'
+  | 'assigned'
+  | 'out-for-delivery'
+  | 'delivered'
+  | 'cancelled';
+
+/** A small local delivery-person roster stored in the existing settings store. */
+export interface DeliveryRider {
+  id: ID;
+  name: string;
+  phone?: string;
+  isActive: boolean;
+}
+
+export interface DeliveryHistoryEntry {
+  status: DeliveryStatus;
+  at: ISODateString;
+  message: string;
+}
+
 /**
  * How the customer settled the order. `other` predates the explicit
  * `digital` option and is still accepted for orders stored before it.
@@ -267,6 +292,13 @@ export interface OrderRecord extends BaseEntity {
   /** Linked customer record, set when the order carried customer details. */
   customerId?: ID | null;
   note?: string;
+  /** Delivery-only information; these fields do not affect the sale total. */
+  deliveryAddress?: string;
+  deliveryNotes?: string;
+  deliveryStatus?: DeliveryStatus;
+  assignedRiderId?: ID | null;
+  deliveryCompletedAt?: ISODateString | null;
+  deliveryHistory?: DeliveryHistoryEntry[];
   completedAt?: ISODateString | null;
   /** Set when the order is cancelled; keeps the audit trail on the order. */
   cancelledAt?: ISODateString | null;

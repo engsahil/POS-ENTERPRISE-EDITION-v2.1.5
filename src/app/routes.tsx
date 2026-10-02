@@ -10,6 +10,7 @@ import { lazy, type ReactElement } from 'react';
 import {
   AdminIcon,
   CustomersIcon,
+  DeliveryIcon,
   InventoryIcon,
   MenuBookIcon,
   PosIcon,
@@ -25,6 +26,7 @@ const MenuPage = lazy(() => import('@/pages/MenuPage'));
 const DealsPage = lazy(() => import('@/pages/DealsPage'));
 const InventoryPage = lazy(() => import('@/pages/InventoryPage'));
 const AdminPage = lazy(() => import('@/pages/AdminPage'));
+const DeliveryPage = lazy(() => import('@/pages/DeliveryPage'));
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'));
 
 export const ROUTE_PATHS = {
@@ -35,6 +37,7 @@ export const ROUTE_PATHS = {
   deals: '/deals',
   inventory: '/inventory',
   admin: '/admin',
+  deliveries: '/deliveries',
 } as const;
 
 export type RoutePath = (typeof ROUTE_PATHS)[keyof typeof ROUTE_PATHS];
@@ -56,12 +59,12 @@ export const appRoutes: AppRoute[] = [
   { id: 'deals', path: 'deals', element: <DealsPage /> },
   { id: 'inventory', path: 'inventory', element: <InventoryPage /> },
   { id: 'admin', path: 'admin', element: <AdminPage /> },
+  { id: 'deliveries', path: 'deliveries', element: <DeliveryPage /> },
   { id: 'not-found', path: '*', element: <NotFoundPage /> },
 ];
 
 /**
- * The seven primary sections. All are `primary` so they appear in both the
- * desktop sidebar and the mobile tab bar — no "More" drawer needed.
+ * The primary sections are shared by the desktop sidebar and mobile tab bar.
  */
 export const NAV_ITEMS: NavItem[] = [
   {
@@ -123,6 +126,16 @@ export const NAV_ITEMS: NavItem[] = [
     description: 'Configuration',
     path: ROUTE_PATHS.admin,
     icon: AdminIcon,
+    primary: true,
+    matchChildren: true,
+  },
+  {
+    id: 'deliveries',
+    label: 'Delivery Management',
+    mobileLabel: 'Delivery',
+    description: 'Orders & riders',
+    path: ROUTE_PATHS.deliveries,
+    icon: DeliveryIcon,
     primary: true,
     matchChildren: true,
   },

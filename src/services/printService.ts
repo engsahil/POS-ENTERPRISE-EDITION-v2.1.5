@@ -24,13 +24,13 @@ const MM_PER_PX = 25.4 / 96;
 /**
  * Measured height of the receipt in millimetres, rounded up.
  *
- * A small tail is added so the last line is never shaved off by rounding,
- * but it is kept tight (2mm) so no meaningful blank space is fed.
+ * A 1mm safety tail prevents the last line being shaved by rounding. No
+ * minimum receipt length is imposed: short orders stay short.
  */
 export function measureHeightMm(element: HTMLElement | null): number {
-  if (!element) return 200;
+  if (!element) return 1;
   const px = Math.max(element.scrollHeight, element.getBoundingClientRect().height);
-  return Math.max(20, Math.ceil(px * MM_PER_PX) + 2);
+  return Math.max(1, Math.ceil(px * MM_PER_PX) + 1);
 }
 
 /**

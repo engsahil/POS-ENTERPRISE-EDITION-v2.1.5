@@ -6,6 +6,8 @@ export interface NavItem {
   /** Stable key used for lists and analytics. */
   id: string;
   label: string;
+  /** Optional shorter label for the constrained mobile tab bar. */
+  mobileLabel?: string;
   /** Short hint shown in the sidebar under the label. */
   description?: string;
   path: string;

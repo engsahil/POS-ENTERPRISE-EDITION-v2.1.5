@@ -3,13 +3,13 @@ import { NAV_ITEMS } from '@/app/routes';
 import { cn } from '@/utils/cn';
 import styles from './TabBar.module.css';
 
-/** Mobile-only bottom navigation. All four sections fit without a "More" item. */
+/** Mobile-only bottom navigation; extra sections remain reachable by horizontal scroll. */
 export function TabBar() {
   const items = NAV_ITEMS.filter((item) => item.primary);
 
   return (
     <nav className={styles.tabbar} aria-label="Sections">
-      {items.map(({ id, label, path, icon: Icon }) => (
+      {items.map(({ id, label, mobileLabel, path, icon: Icon }) => (
         <NavLink
           key={id}
           to={path}
@@ -24,7 +24,7 @@ export function TabBar() {
                 <Icon width={20} height={20} />
                 {isActive ? <span className={styles.dot} /> : null}
               </span>
-              <span className={styles.label}>{label}</span>
+              <span className={styles.label}>{mobileLabel ?? label}</span>
             </>
           )}
         </NavLink>

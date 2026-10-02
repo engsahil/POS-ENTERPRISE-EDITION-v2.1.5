@@ -6,6 +6,7 @@
  */
 
 import type { ReceiptModel, ReceiptWidth } from './receiptService';
+import { receiptOrderTypeLabel } from '@/utils/receipt';
 import { formatMoney } from '@/utils/currency';
 import { formatPaymentMethod } from '@/utils/payment';
 
@@ -27,7 +28,7 @@ export const CMD = {
   BOLD_OFF: [ESC, 0x45, 0],
   SIZE_NORMAL: [GS, 0x21, 0x00],
   SIZE_DOUBLE: [GS, 0x21, 0x11],
-  CUT: [GS, 0x56, 66, 0x03],
+  CUT: [GS, 0x56, 66, 0x01],
   feed: (n: number) => [ESC, 0x64, n],
 } as const;
 
@@ -143,9 +144,13 @@ export function renderPlainText(
   out.push(divider);
 
   out.push(twoColumns('Order', `#${model.orderNumber}`, cols));
-  out.push(twoColumns('Type', model.orderType, cols));
+  out.push(twoColumns('Type', receiptOrderTypeLabel(model.orderType), cols));
   if (model.tableLabel) out.push(twoColumns('Table', model.tableLabel, cols));
   if (model.customerName) out.push(twoColumns('Customer', model.customerName, cols));
+  if (model.customerPhone) out.push(twoColumns('Phone', model.customerPhone, cols));
+  if (model.deliveryAddress) {
+    for (const line of wrapText(`Address: ${model.deliveryAddress}`, cols)) out.push(line);
+  }
   out.push(twoColumns('Date', model.date, cols));
   out.push(twoColumns('Time', model.time, cols));
   out.push(divider);
@@ -189,6 +194,9 @@ export function renderPlainText(
     for (const content of line.dealContents) {
       for (const wrapped of wrapText(`  - ${content}`, cols)) out.push(wrapped);
     }
+    if (line.note) {
+      for (const wrapped of wrapText(`  Note: ${line.note}`, cols)) out.push(wrapped);
+    }
   }
 
   out.push(divider);
@@ -229,8 +237,13 @@ export function renderPlainText(
     centre(`${model.itemCount} item${model.itemCount === 1 ? '' : 's'}`, cols),
   );
 
+  if (model.deliveryNotes) {
+    for (const line of wrapText(`Delivery instructions: ${model.deliveryNotes}`, cols)) out.push(line);
+  }
+  if (model.note) {
+    for (const line of wrapText(`Note: ${model.note}`, cols)) out.push(line);
+  }
   if (model.footer) {
-    out.push('');
     for (const line of wrapText(model.footer, cols)) out.push(centre(line, cols));
   }
 
@@ -278,9 +291,13 @@ export function encodeReceipt(
   line('-'.repeat(cols));
 
   line(twoColumns('Order', `#${model.orderNumber}`, cols));
-  line(twoColumns('Type', model.orderType, cols));
+  line(twoColumns('Type', receiptOrderTypeLabel(model.orderType), cols));
   if (model.tableLabel) line(twoColumns('Table', model.tableLabel, cols));
   if (model.customerName) line(twoColumns('Customer', model.customerName, cols));
+  if (model.customerPhone) line(twoColumns('Phone', model.customerPhone, cols));
+  if (model.deliveryAddress) {
+    for (const wrapped of wrapText(`Address: ${model.deliveryAddress}`, cols)) line(wrapped);
+  }
   line(twoColumns('Date', model.date, cols));
   line(twoColumns('Time', model.time, cols));
   line('-'.repeat(cols));
@@ -327,6 +344,9 @@ export function encodeReceipt(
     for (const content of item.dealContents) {
       for (const wrapped of wrapText(`  - ${content}`, cols)) line(wrapped);
     }
+    if (item.note) {
+      for (const wrapped of wrapText(`  Note: ${item.note}`, cols)) line(wrapped);
+    }
   }
 
   line('-'.repeat(cols));
@@ -365,12 +385,17 @@ export function encodeReceipt(
   push(CMD.ALIGN_CENTER);
   line(`${model.itemCount} item${model.itemCount === 1 ? '' : 's'}`);
 
+  if (model.deliveryNotes) {
+    for (const l of wrapText(`Delivery instructions: ${model.deliveryNotes}`, cols)) line(l);
+  }
+  if (model.note) {
+    for (const l of wrapText(`Note: ${model.note}`, cols)) line(l);
+  }
   if (model.footer) {
-    line('');
     for (const l of wrapText(model.footer, cols)) line(l);
   }
 
-  push(CMD.feed(3), CMD.CUT);
+  push(CMD.feed(1), CMD.CUT);
 
   return new Uint8Array(bytes);
 }

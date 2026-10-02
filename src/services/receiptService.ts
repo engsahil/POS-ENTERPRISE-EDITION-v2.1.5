@@ -26,6 +26,8 @@ import type {
 } from '@/types/domain';
 import type { ID, Paisa } from '@/types/common';
 
+export { receiptOrderTypeLabel } from '@/utils/receipt';
+
 /** Supported thermal paper widths. */
 export const RECEIPT_WIDTHS = ['58mm', '80mm'] as const;
 export type ReceiptWidth = (typeof RECEIPT_WIDTHS)[number];
@@ -51,6 +53,7 @@ export interface ReceiptLine {
   dealSavings: Paisa;
   toppings: SelectedTopping[];
   addOns: SelectedAddOn[];
+  note: string | null;
   toppingTotal: Paisa;
   addOnTotal: Paisa;
 }
@@ -85,6 +88,8 @@ export interface ReceiptModel {
   tableLabel: string | null;
   customerName: string | null;
   customerPhone: string | null;
+  deliveryAddress: string | null;
+  deliveryNotes: string | null;
   note: string | null;
   discountTotal: Paisa;
   amountPaid: Paisa | null;
@@ -100,6 +105,8 @@ export interface KitchenReceiptModel {
   tableLabel: string | null;
   customerName: string | null;
   customerPhone: string | null;
+  deliveryAddress: string | null;
+  deliveryNotes: string | null;
   note: string | null;
   lines: ReceiptLine[];
   itemCount: number;
@@ -166,26 +173,30 @@ export const receiptService = {
         if (deal) {
           let contentsValue = 0;
 
-          dealContents = await Promise.all(
-            deal.items.map(async (line) => {
-              const menuItem = await menuItemsRepository.getById(
-                line.menuItemId,
-              );
-              const label = menuItem?.name ?? 'Item';
-              const size = line.sizeLabel ? ` (${line.sizeLabel})` : '';
+          dealContents = (
+            await Promise.all(
+              deal.items.map(async (line) => {
+                const menuItem = await menuItemsRepository.getById(
+                  line.menuItemId,
+                );
+                if (!menuItem || menuItem.deletedAt || !menuItem.name.trim()) {
+                  return null;
+                }
+                const size = line.sizeLabel ? ` (${line.sizeLabel})` : '';
 
-              const prices = await itemPricesRepository.findByIndex(
-                'by_menuItemId',
-                line.menuItemId,
-              );
-              const priceRow = prices.find(
-                (row) => row.label === line.sizeLabel,
-              );
-              if (priceRow) contentsValue += priceRow.price * line.quantity;
+                const prices = await itemPricesRepository.findByIndex(
+                  'by_menuItemId',
+                  line.menuItemId,
+                );
+                const priceRow = prices.find(
+                  (row) => row.label === line.sizeLabel,
+                );
+                if (priceRow) contentsValue += priceRow.price * line.quantity;
 
-              return `${line.quantity} x ${label}${size}`;
-            }),
-          );
+                return `${line.quantity} x ${menuItem.name}${size}`;
+              }),
+            )
+          ).filter((entry): entry is string => entry !== null);
 
           const separately = contentsValue * item.quantity;
           dealSavings = Math.max(0, separately - item.lineTotal);
@@ -204,6 +215,7 @@ export const receiptService = {
         dealSavings,
         toppings: item.toppings ?? [],
         addOns: item.addOns ?? [],
+        note: orNull(item.note),
         toppingTotal: item.toppingTotal ?? 0,
         addOnTotal: item.addOnTotal ?? 0,
       });
@@ -237,6 +249,8 @@ export const receiptService = {
       tableLabel: orNull(order.tableLabel),
       customerName: orNull(order.customerName),
       customerPhone: orNull(order.customerPhone),
+      deliveryAddress: orNull(order.deliveryAddress),
+      deliveryNotes: orNull(order.deliveryNotes),
       note: orNull(order.note),
       discountTotal: order.discountTotal ?? 0,
       amountPaid: order.amountPaid ?? null,
@@ -258,6 +272,8 @@ export const receiptService = {
       tableLabel: customer.tableLabel,
       customerName: customer.customerName,
       customerPhone: customer.customerPhone,
+      deliveryAddress: customer.deliveryAddress,
+      deliveryNotes: customer.deliveryNotes,
       note: customer.note,
       lines: customer.lines,
       itemCount: customer.itemCount,

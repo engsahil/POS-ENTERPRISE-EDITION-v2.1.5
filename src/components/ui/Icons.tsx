@@ -55,6 +55,15 @@ export const InventoryIcon = (props: IconProps) => (
   </Icon>
 );
 
+export const DeliveryIcon = (props: IconProps) => (
+  <Icon {...props}>
+    <path d="M3 6.5h11.5v10H3z" />
+    <path d="M14.5 10h4l2.5 3v3.5h-6.5z" />
+    <circle cx="7" cy="18" r="1.75" />
+    <circle cx="18" cy="18" r="1.75" />
+  </Icon>
+);
+
 export const AdminIcon = (props: IconProps) => (
   <Icon {...props}>
     <path d="M12 3 4.5 6v5.5c0 4.2 3 8.1 7.5 9.5 4.5-1.4 7.5-5.3 7.5-9.5V6L12 3Z" />

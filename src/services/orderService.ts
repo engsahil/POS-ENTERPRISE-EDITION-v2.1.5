@@ -271,6 +271,8 @@ export interface CompleteOrderInput {
   customerName?: string;
   customerPhone?: string;
   note?: string;
+  deliveryAddress?: string;
+  deliveryNotes?: string;
 }
 
 export interface CompletedOrder {
@@ -342,6 +344,16 @@ export const orderService = {
     const customerName = input.customerName?.trim() ? input.customerName.trim().slice(0, 80) : undefined;
     const customerPhone = input.customerPhone?.trim() ? input.customerPhone.trim().slice(0, 30) : undefined;
     const note = input.note?.trim() ? input.note.trim().slice(0, 300) : undefined;
+    const deliveryAddress = input.deliveryAddress?.trim()
+      ? input.deliveryAddress.trim().slice(0, 300)
+      : undefined;
+    const deliveryNotes = input.deliveryNotes?.trim()
+      ? input.deliveryNotes.trim().slice(0, 500)
+      : undefined;
+
+    if (orderType === 'delivery' && !deliveryAddress) {
+      throw new ValidationError('Delivery address is required.');
+    }
 
     // Reuse the customer's existing record (matched by phone, then exact
     // name) or create one — checkout itself stays a single step.
@@ -367,6 +379,21 @@ export const orderService = {
       customerPhone,
       customerId: customer?.id ?? null,
       note,
+      ...(orderType === 'delivery'
+        ? {
+            deliveryAddress,
+            deliveryNotes,
+            deliveryStatus: 'pending' as const,
+            assignedRiderId: null,
+            deliveryHistory: [
+              {
+                status: 'pending' as const,
+                at: timestamp,
+                message: 'Delivery order created.',
+              },
+            ],
+          }
+        : {}),
       completedAt: timestamp,
       createdAt: timestamp,
       updatedAt: timestamp,
