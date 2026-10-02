@@ -139,14 +139,4 @@ export const NAV_ITEMS: NavItem[] = [
     primary: true,
     matchChildren: true,
   },
-  {
-    id: 'deliveries',
-    label: 'Delivery Management',
-    mobileLabel: 'Delivery',
-    description: 'Orders & riders',
-    path: ROUTE_PATHS.deliveries,
-    icon: DeliveryIcon,
-    primary: true,
-    matchChildren: true,
-  },
 ];
