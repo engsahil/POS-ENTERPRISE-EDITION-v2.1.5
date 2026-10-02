@@ -16,10 +16,16 @@ import styles from './ReceiptView.module.css';
 export interface ReceiptViewProps {
   model: ReceiptModel;
   kitchenModel?: KitchenReceiptModel;
+  deliveryReceipt?: boolean;
   actions?: React.ReactNode;
 }
 
-export function ReceiptView({ model, kitchenModel, actions }: ReceiptViewProps) {
+export function ReceiptView({
+  model,
+  kitchenModel,
+  deliveryReceipt = false,
+  actions,
+}: ReceiptViewProps) {
   const [width, setWidth] = useState<ReceiptWidth | null>(null);
   const [showPrinter, setShowPrinter] = useState(false);
   const [activeTab, setActiveTab] = useState<'customer' | 'kitchen'>('customer');
@@ -54,6 +60,8 @@ export function ReceiptView({ model, kitchenModel, actions }: ReceiptViewProps) 
     tableLabel: model.tableLabel,
     customerName: model.customerName,
     customerPhone: model.customerPhone,
+    deliveryAddress: model.deliveryAddress,
+    deliveryNotes: model.deliveryNotes,
     note: model.note,
     lines: model.lines,
     itemCount: model.itemCount,
@@ -139,7 +147,9 @@ export function ReceiptView({ model, kitchenModel, actions }: ReceiptViewProps) 
             Thermal printer
           </Button>
           <Button variant="secondary" onClick={() => printReceipt({ width: width as ReceiptWidth, container: currentRef.current })}>
-            Print {activeTab === 'customer' ? 'Customer' : 'Kitchen'}
+            {deliveryReceipt && activeTab === 'customer'
+              ? 'Print Delivery Receipt'
+              : `Print ${activeTab === 'customer' ? 'Customer' : 'Kitchen'}`}
           </Button>
           <Button variant="secondary" onClick={printBoth}>
             Print Both
@@ -156,7 +166,7 @@ export function ReceiptView({ model, kitchenModel, actions }: ReceiptViewProps) 
             aria-pressed={activeTab === 'customer'}
             onClick={() => setActiveTab('customer')}
           >
-            Customer Receipt
+            {deliveryReceipt ? 'Delivery Receipt' : 'Customer Receipt'}
           </button>
           <button
             type="button"

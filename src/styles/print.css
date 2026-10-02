@@ -32,8 +32,7 @@
     display: none !important;
   }
 
-  .print-root,
-  .print-root > * {
+  .print-root {
     display: block !important;
     position: static !important;
     margin: 0 !important;
@@ -46,6 +45,23 @@
     height: auto !important;
     max-height: none !important;
     /* Scrollable ancestors would otherwise clip the receipt to one screen. */
+    flex: none !important;
+  }
+
+  /* Reset any intermediate wrappers, but keep physical width and padding on
+     the receipt sheet itself so its content remains aligned within the paper. */
+  .print-root > :not([data-receipt-width]) {
+    display: block !important;
+    position: static !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    background: none !important;
+    box-shadow: none !important;
+    overflow: visible !important;
+    width: auto !important;
+    height: auto !important;
+    max-height: none !important;
     flex: none !important;
   }
 

@@ -1,4 +1,4 @@
-# POS — v2.1.5
+# POS — v3.1.0
 
 Offline-first Point of Sale application. **Step 3: Admin Authentication.**
 
@@ -550,9 +550,10 @@ orders, and to look those orders up again.
 - **Manual records** — "Add customer" works without ever placing an order, and
   details can be edited from the detail panel.
 
-Nothing else is collected: no emails, addresses, loyalty tiers or anything the
-operator did not type. The section is available on the sidebar, the mobile tab
-bar and at `/customers`.
+Customer records may also include an optional address entered by the operator;
+Delivery Management reuses that saved address when creating a delivery order.
+No loyalty tiers or other generated customer data are added. The section is
+available on the sidebar, the mobile tab bar and at `/customers`.
 
 ## POS billing
 
@@ -649,6 +650,27 @@ Billing reads locally stored menu data and writes to IndexedDB. **No network
 is involved** — verified by completing an order with the browser forced
 offline.
 
+## Delivery Management
+
+The `/deliveries` section works with existing completed POS orders. Choose
+**Delivery** in POS to require an address and optionally enter delivery
+instructions; selecting a saved customer pre-fills their name, phone and saved
+address. Orders remain ordinary sales, with delivery fulfilment stored as
+optional fields on the existing order record.
+
+Delivery Management provides a status/today overview, order search, status and
+rider filters, date range, order/payment/item details and a progress history.
+Operators can assign or change riders, update an address or instructions, and
+track Pending, Confirmed, Preparing, Ready for Delivery, Assigned, Out for
+Delivery, Delivered and Cancelled. The rider roster uses the existing settings
+store (`delivery.riders`); no new IndexedDB store or migration is introduced.
+Sales totals and payment data remain owned by the existing order workflow.
+
+The order detail reuses the customer and compact kitchen receipt layouts,
+including delivery contact/address and notes where available. The kitchen
+receipt omits prices and customer totals. Printing uses the saved restaurant
+profile logo without adding another upload workflow.
+
 ## Printing
 
 Two genuinely different paths, deliberately not conflated:
@@ -707,34 +729,36 @@ the exact byte stream for checking against a real device.
 
 ## Receipts
 
-Completing an order opens its receipt. The layout is a dedicated thermal
-format supporting **58mm** and **80mm** paper, switchable from the receipt
-toolbar; the chosen width is saved as the default for the next receipt.
+Completing an order opens its customer receipt. Delivery Management can reopen
+a stored order and print it again. The thermal preview supports **58mm** and
+**80mm** paper, switchable from the receipt toolbar; the chosen width is saved
+as the default for the next receipt. Customer and kitchen receipts can be
+printed separately or together.
 
-A receipt prints the restaurant name, logo, address, phone, email and receipt
-info (each omitted entirely when not configured), the order ID, date and time,
-every line with its size, quantity, unit price and amount, the subtotal, an
-optional discount row (only when a discount was applied), deal savings and
-tax where applicable, the total, the payment method, the amount paid and the
-change due, and the configured footer.
+Customer receipts show the saved restaurant name, logo, contact details and
+receipt info when available; readable order type, number, date and time; item
+name/size/quantity/prices and modifiers; totals/payment; and saved order, item
+and delivery notes. Delivery receipts additionally show the customer's phone,
+delivery address and instructions when present. The customer logo is reused
+from the existing restaurant profile, keeps its aspect ratio and is omitted
+cleanly when absent or unavailable.
+
+Kitchen tickets contain order context, quantities, products/modifiers and
+available notes, but no prices or customer totals. They are compact and share
+the selected 58mm/80mm width so staff can read the fulfilment details without
+printing billing information.
 
 ### How the layout is kept from breaking
 
-- The sheet is a **fixed physical width** (58mm / 80mm) and nothing inside may
-  exceed it.
-- Items use a four-column grid: one flexible name column plus **fixed** qty,
-  price and amount columns. Amount columns never shrink, so a long product
-  name can never squeeze the total off the paper.
-- Every text cell uses `overflow-wrap: anywhere`, so long names and emails
-  wrap rather than clip or overflow.
-- Numeric columns are `white-space: nowrap`, so "Qty" and multi-digit
-  quantities never split across lines.
-- Optional rows are omitted rather than rendered blank, so nothing leaves a
-  gap.
-
-Printing hides all app chrome and removes page margins, so only the receipt
-reaches the paper at its true width. Thermal-printer integration is
-deliberately **not** part of this step.
+- The sheet uses a **fixed physical width** (58mm / 80mm); the item name gets
+  the flexible column while quantity and money columns remain aligned.
+- Long names, addresses and notes wrap rather than clip or overflow; optional
+  rows are omitted rather than rendered blank.
+- Browser print height is measured from the rendered receipt content with a
+  small safety tail, so short orders do not feed a long fixed blank page.
+- Print output hides application chrome and removes page margins. ESC/POS direct
+  printing remains available as a separate path; physical thermal-printer
+  behavior is not verified in this environment.
 
 ## Deals
 
@@ -918,7 +942,7 @@ trigger a one-minute lockout.
 
 ## Key decisions
 
-**Version** — `2.1.5` in `package.json` and `src/config/app.config.ts` (the service worker cache revision is derived from the built assets).
+**Version** — `3.1.0` in `package.json` and `src/config/app.config.ts` (the service worker cache revision is derived from the built assets).
 
 **Currency** — Pakistani Rupees only. Money is stored as **integer paisa** to avoid
 floating-point drift and formatted through `formatMoney()` so `Rs.` is never
@@ -926,9 +950,10 @@ hard-coded in the UI. `parseMoney()` accepts `Rs. 1,250.50`, `1,250`, `PKR 300`.
 
 **Routing** — `src/app/routes.tsx` is the single registry. Pages are lazy-loaded
 and code-split; the sidebar and mobile tab bar are generated from `NAV_ITEMS`,
-so navigation can never drift out of sync with the router. The seven sections
+so navigation can never drift out of sync with the router. The eight sections
 are POS (`/`), Sales (`/sales`), Customers (`/customers`), Menu (`/menu`),
-Deals (`/deals`), Inventory (`/inventory`) and Admin (`/admin`).
+Deals (`/deals`), Inventory (`/inventory`), Admin (`/admin`) and Delivery
+Management (`/deliveries`).
 
 **Storage** — IndexedDB is the system of record, ready for offline-first. Every
 record carries `createdAt` / `updatedAt` / `deletedAt` / `rev`, deletes are soft
@@ -948,9 +973,9 @@ scale-down on button press. All of it collapses under
 `prefers-reduced-motion: reduce`.
 
 **Responsive** — Desktop (≥1024px) full sidebar with labels · Tablet
-(640–1023px) compact icon rail · Mobile (<640px) bottom tab bar carrying all
-seven sections. Touch targets are 44px minimum, inputs use 16px text to avoid iOS
-zoom-on-focus, and safe-area insets are respected.
+(640–1023px) compact icon rail · Mobile (<640px) horizontally scrollable bottom
+tab bar carrying all eight sections. Touch targets are 44px minimum, inputs use
+16px text to avoid iOS zoom-on-focus, and safe-area insets are respected.
 
 **PWA** — Manifest, icons (incl. maskable), theme colour and an app-shell service
 worker are in place. The worker is registered in production builds only so dev
@@ -959,14 +984,32 @@ hot reload is unaffected.
 **No chrome** — There is no global header, no footer, no marketing sections and
 no dashboard widgets. Navigation is the only persistent UI; each screen renders
 its own `PageHeader`. The offline banner appears only when the connection drops.
-Because every section fits in the mobile tab bar, there is no hamburger menu
-or drawer either.
+All sections remain reachable from the horizontally scrollable mobile tab bar,
+so there is no hamburger menu or drawer.
 
 **No invented data** — Every section is a professional empty state. The only
 figures shown anywhere are genuine runtime facts on the Admin screen (version,
 currency, locale, database name/version, storage availability, connection).
 
-## Verified
+## v3.1.0 verification
+
+Current upgrade checks:
+
+- `npm ci` completed; `npm run typecheck` and `npm run build` passed.
+- Customer and kitchen receipt markup smoke checks passed for delivery context,
+  long item names, modifiers, notes, totals/payment, optional-field omission and
+  the no-price kitchen ticket.
+- ESC/POS output smoke checks passed at 58mm and 80mm for line width, delivery
+  details, modifiers and notes. The content-height helper was checked with
+  empty, short and tall receipt measurements.
+- Full browser/IndexedDB workflow regression and physical thermal-printer tests
+  were not run in this environment.
+
+## Archived baseline verification
+
+The following browser and performance checks are historical records for the
+pre-3.1.0 baseline; they do not claim browser verification of the new delivery
+workflow or physical-printer verification of the receipt changes.
 
 Checked in a real headless browser at 1440x900, 834x1112 and 390x844:
 
@@ -1287,7 +1330,7 @@ through the same display-mode query the application reads.
 
 Settings, privacy and branding (50 assertions):
 
-- Application information shows Version `2.1.5`, `Pakistani Rupees (Rs.)`,
+- Application information shows Version `3.1.0`, `Pakistani Rupees (Rs.)`,
   `PKR`, locale, time zone, local storage and provider.
 - Privacy Policy renders with 10 correctly numbered sections covering what is
   stored, the absence of analytics, when data leaves the device, PBKDF2

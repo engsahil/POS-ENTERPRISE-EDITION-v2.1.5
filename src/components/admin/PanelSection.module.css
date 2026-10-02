@@ -227,6 +227,26 @@
   min-width: 0;
 }
 
+.metricSales {
+  background-color: var(--color-accent-soft);
+  border-color: color-mix(in srgb, var(--color-accent) 28%, var(--color-border));
+}
+
+.metricOrders {
+  background-color: var(--color-info-soft);
+  border-color: color-mix(in srgb, var(--color-info) 22%, var(--color-border));
+}
+
+.metricItems {
+  background-color: var(--color-success-soft);
+  border-color: color-mix(in srgb, var(--color-success) 20%, var(--color-border));
+}
+
+.metricAlerts {
+  background-color: var(--color-warning-soft);
+  border-color: color-mix(in srgb, var(--color-warning) 24%, var(--color-border));
+}
+
 .metricValue {
   font-size: var(--fs-xl);
   font-weight: var(--fw-semibold);

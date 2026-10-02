@@ -92,21 +92,21 @@ export function DashboardSection() {
   return (
     <div className={styles.stack}>
       <section className={styles.metrics}>
-        <div className={styles.metric}>
+        <div className={`${styles.metric} ${styles.metricSales}`}>
           <span className={styles.metricValue}>
             {formatMoney(counts.todayTotal)}
           </span>
           <span className={styles.metricLabel}>Sales today</span>
         </div>
-        <div className={styles.metric}>
+        <div className={`${styles.metric} ${styles.metricOrders}`}>
           <span className={styles.metricValue}>{counts.todayOrders}</span>
           <span className={styles.metricLabel}>Orders today</span>
         </div>
-        <div className={styles.metric}>
+        <div className={`${styles.metric} ${styles.metricItems}`}>
           <span className={styles.metricValue}>{counts.activeMenu}</span>
           <span className={styles.metricLabel}>Items available</span>
         </div>
-        <div className={styles.metric}>
+        <div className={`${styles.metric} ${styles.metricAlerts}`}>
           <span className={styles.metricValue}>{counts.lowStock}</span>
           <span className={styles.metricLabel}>Stock alerts</span>
         </div>

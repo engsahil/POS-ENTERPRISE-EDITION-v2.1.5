@@ -1,4 +1,6 @@
+import { useState } from 'react';
 import type { ReceiptModel, ReceiptWidth } from '@/services/receiptService';
+import { receiptOrderTypeLabel } from '@/utils/receipt';
 import { formatMoney } from '@/utils/currency';
 import { formatPaymentMethod } from '@/utils/payment';
 import styles from './Receipt.module.css';
@@ -10,6 +12,8 @@ export interface ReceiptProps {
 
 export function Receipt({ model, width }: ReceiptProps) {
   const { header } = model;
+  const [failedLogoUrl, setFailedLogoUrl] = useState<string | null>(null);
+  const logoUrl = header.logo?.dataUrl;
 
   const hasContact = Boolean(header.address || header.phone || header.email);
 
@@ -23,11 +27,12 @@ export function Receipt({ model, width }: ReceiptProps) {
     >
       {/* ---------- Header ---------- */}
       <header className={styles.header}>
-        {header.logo ? (
+        {logoUrl?.startsWith('data:image/') && failedLogoUrl !== logoUrl ? (
           <img
-            src={header.logo.dataUrl}
+            src={logoUrl}
             alt=""
             className={styles.logo}
+            onError={() => setFailedLogoUrl(logoUrl)}
           />
         ) : null}
 
@@ -64,7 +69,7 @@ export function Receipt({ model, width }: ReceiptProps) {
         </div>
         <div className={styles.metaRow}>
           <dt>Type</dt>
-          <dd className={styles.metaValue}>{model.orderType}</dd>
+          <dd className={styles.metaValue}>{receiptOrderTypeLabel(model.orderType)}</dd>
         </div>
         {model.tableLabel ? (
           <div className={styles.metaRow}>
@@ -82,6 +87,12 @@ export function Receipt({ model, width }: ReceiptProps) {
           <div className={styles.metaRow}>
             <dt>Phone</dt>
             <dd className={styles.metaValue}>{model.customerPhone}</dd>
+          </div>
+        ) : null}
+        {model.deliveryAddress ? (
+          <div className={styles.metaRow}>
+            <dt>Delivery address</dt>
+            <dd className={styles.metaValue}>{model.deliveryAddress}</dd>
           </div>
         ) : null}
         <div className={styles.metaRow}>
@@ -155,6 +166,8 @@ export function Receipt({ model, width }: ReceiptProps) {
                 ))}
               </ul>
             ) : null}
+
+            {line.note ? <p className={styles.itemNote}>Note: {line.note}</p> : null}
           </li>
         ))}
       </ul>
@@ -222,6 +235,10 @@ export function Receipt({ model, width }: ReceiptProps) {
       <p className={styles.count}>
         {model.itemCount} item{model.itemCount === 1 ? '' : 's'}
       </p>
+
+      {model.deliveryNotes ? (
+        <p className={styles.footer}>Delivery instructions: {model.deliveryNotes}</p>
+      ) : null}
 
       {model.note ? (
         <p className={styles.footer}>Note: {model.note}</p>

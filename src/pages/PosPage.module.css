@@ -4,6 +4,107 @@
   padding: var(--sp-4) 0;
 }
 
+.storeBrand {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  min-height: 48px;
+  margin-top: calc(-1 * var(--sp-3));
+}
+
+.storeLogo {
+  display: block;
+  width: 48px;
+  height: 48px;
+  object-fit: contain;
+}
+
+.storeName {
+  color: var(--color-text-secondary);
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+}
+
+.orderTypes,
+.orderDetails,
+.customerFields,
+.deliveryFields {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+.orderTypes {
+  margin-bottom: var(--sp-3);
+}
+
+.orderTypeButton {
+  padding: 8px 14px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  color: var(--color-text-secondary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.orderTypeButton:hover {
+  background-color: var(--color-hover);
+}
+
+.orderTypeActive,
+.orderTypeActive:hover {
+  border: 2px solid var(--color-accent);
+  padding: 7px 13px;
+  background-color: var(--color-accent-soft);
+  color: var(--color-text);
+  font-weight: var(--fw-semibold);
+}
+
+.orderDetails {
+  align-items: flex-end;
+  margin-bottom: var(--sp-3);
+}
+
+.customerFields {
+  width: 100%;
+}
+
+.customerFields > * {
+  flex: 1 1 180px;
+  min-width: 0;
+}
+
+.deliveryFields {
+  width: 100%;
+}
+
+.deliveryFields > * {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+.selectField {
+  display: flex;
+  flex: 1 1 250px;
+  flex-direction: column;
+  gap: var(--sp-1);
+  min-width: 0;
+  color: var(--color-text-secondary);
+  font-size: var(--fs-sm);
+}
+
+.select {
+  min-height: 40px;
+  width: 100%;
+  padding: 0 var(--sp-3);
+  border: 1px solid var(--color-border-strong);
+  border-radius: var(--radius-md);
+  background-color: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
 /* Items scroll independently; the cart stays put beside them. */
 .layout {
   flex: 1;

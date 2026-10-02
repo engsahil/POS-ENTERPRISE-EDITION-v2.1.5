@@ -1,4 +1,5 @@
 import type { KitchenReceiptModel, ReceiptWidth } from '@/services/receiptService';
+import { receiptOrderTypeLabel } from '@/utils/receipt';
 import styles from './Receipt.module.css';
 
 export interface KitchenReceiptProps {
@@ -9,13 +10,14 @@ export interface KitchenReceiptProps {
 export function KitchenReceipt({ model, width }: KitchenReceiptProps) {
   return (
     <article
-      className={`${styles.sheet} ${width === '58mm' ? styles.w58 : styles.w80}`}
+      className={`${styles.sheet} ${
+        width === '58mm' ? styles.w58 : styles.w80
+      } ${styles.kitchenSheet}`}
       data-receipt-width={width}
       aria-label={`Kitchen receipt for order ${model.orderNumber}`}
     >
-      <header className={styles.header}>
-        <h1 className={styles.name}>KITCHEN</h1>
-        <p className={styles.info}>Order #{model.orderNumber}</p>
+      <header className={styles.kitchenHeader}>
+        <h1 className={styles.kitchenTitle}>KITCHEN</h1>
       </header>
 
       <div className={styles.rule} />
@@ -27,7 +29,7 @@ export function KitchenReceipt({ model, width }: KitchenReceiptProps) {
         </div>
         <div className={styles.metaRow}>
           <dt>Type</dt>
-          <dd className={styles.metaValue}>{model.orderType}</dd>
+          <dd className={styles.metaValue}>{receiptOrderTypeLabel(model.orderType)}</dd>
         </div>
         {model.tableLabel ? (
           <div className={styles.metaRow}>
@@ -39,6 +41,18 @@ export function KitchenReceipt({ model, width }: KitchenReceiptProps) {
           <div className={styles.metaRow}>
             <dt>Customer</dt>
             <dd className={styles.metaValue}>{model.customerName}</dd>
+          </div>
+        ) : null}
+        {model.orderType === 'delivery' && model.customerPhone ? (
+          <div className={styles.metaRow}>
+            <dt>Phone</dt>
+            <dd className={styles.metaValue}>{model.customerPhone}</dd>
+          </div>
+        ) : null}
+        {model.orderType === 'delivery' && model.deliveryAddress ? (
+          <div className={styles.metaRow}>
+            <dt>Address</dt>
+            <dd className={styles.metaValue}>{model.deliveryAddress}</dd>
           </div>
         ) : null}
         <div className={styles.metaRow}>
@@ -53,66 +67,48 @@ export function KitchenReceipt({ model, width }: KitchenReceiptProps) {
 
       <div className={styles.rule} />
 
-      <div className={styles.itemsHead} aria-hidden="true">
-        <span className={styles.colItem}>Item</span>
-        <span className={styles.colQty}>Qty</span>
-        <span className={styles.colPrice}></span>
-        <span className={styles.colTotal}></span>
-      </div>
-
-      <ul className={styles.items}>
+      <ul className={styles.kitchenItems}>
         {model.lines.map((line) => (
-          <li key={line.id} className={styles.item}>
-            <div className={styles.itemRow}>
-              <span className={styles.colItem}>
-                <strong>{line.quantity}x {line.name}</strong>
+          <li key={line.id} className={styles.kitchenItem}>
+            <div className={styles.kitchenItemHead}>
+              <span className={styles.kitchenQuantity}>{line.quantity}×</span>
+              <span className={styles.kitchenName}>
+                <strong>{line.name}</strong>
                 {line.sizeLabel ? <span className={styles.size}> ({line.sizeLabel})</span> : null}
                 {line.isDeal ? <span className={styles.dealTag}> DEAL</span> : null}
               </span>
-              <span className={styles.colQty}>{line.quantity}</span>
-              <span className={styles.colPrice}></span>
-              <span className={styles.colTotal}></span>
             </div>
 
             {line.toppings.length > 0 ? (
-              <ul className={styles.dealContents}>
-                {line.toppings.map((t, idx) => (
-                  <li key={`top-${idx}`} className={styles.dealContent}>
-                    + Topping: {t.name}
-                  </li>
+              <ul className={styles.kitchenModifiers}>
+                {line.toppings.map((topping, index) => (
+                  <li key={`topping-${index}`}>Topping: {topping.name}</li>
                 ))}
               </ul>
             ) : null}
-
             {line.addOns.length > 0 ? (
-              <ul className={styles.dealContents}>
-                {line.addOns.map((a, idx) => (
-                  <li key={`addon-${idx}`} className={styles.dealContent}>
-                    + Add-on: {a.name}
-                  </li>
+              <ul className={styles.kitchenModifiers}>
+                {line.addOns.map((addOn, index) => (
+                  <li key={`addon-${index}`}>Add-on: {addOn.name}</li>
                 ))}
               </ul>
             ) : null}
-
             {line.isDeal && line.dealContents.length > 0 ? (
-              <ul className={styles.dealContents}>
-                {line.dealContents.map((entry, idx) => (
-                  <li key={idx} className={styles.dealContent}>{entry}</li>
+              <ul className={styles.kitchenModifiers}>
+                {line.dealContents.map((entry, index) => (
+                  <li key={`deal-${index}`}>{entry}</li>
                 ))}
               </ul>
             ) : null}
+            {line.note ? <p className={styles.kitchenNote}>Note: {line.note}</p> : null}
           </li>
         ))}
       </ul>
 
-      <div className={styles.rule} />
-
-      <p className={styles.count}>
-        {model.itemCount} item{model.itemCount === 1 ? '' : 's'} • {model.orderType}
-        {model.tableLabel ? ` • Table ${model.tableLabel}` : ''}
-      </p>
-
-      {model.note ? <p className={styles.footer}>Note: {model.note}</p> : null}
+      {model.deliveryNotes ? (
+        <p className={styles.kitchenNote}>Delivery instructions: {model.deliveryNotes}</p>
+      ) : null}
+      {model.note ? <p className={styles.kitchenNote}>Order note: {model.note}</p> : null}
     </article>
   );
 }
