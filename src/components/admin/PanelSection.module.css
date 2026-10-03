@@ -353,6 +353,14 @@
   color: var(--color-text-secondary);
 }
 
+.confirmList {
+  margin: 0;
+  padding-left: var(--sp-5);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  color: var(--color-text-secondary);
+}
+
 @media (max-width: 639px) {
   .actions {
     flex-wrap: wrap;

@@ -490,8 +490,9 @@ for the session.
 | Printer | Default paper width (58mm / 80mm) and direct-printing capability |
 | Security | Change admin username and password |
 | License | Local licence record |
-| Settings | Order number prefix, default low stock level, receipt behaviour |
-| Data | Which address and database this terminal is reading, record counts, and the export/restore bridge for moving records between addresses |
+| Settings | Order number prefix, default low stock level, receipt behaviour, and Data Management |
+
+Data Management is inside Settings. It shows this terminal's database details and record counts, offers one-click JSON backup, and supports a reviewed import. See [Data backup and restore](#data-backup-and-restore) below.
 
 Menu, Inventory and Deals already own full screens, so Admin **links to them
 rather than duplicating the UI** - one implementation each, no risk of two
@@ -514,6 +515,29 @@ Nothing here is a dead switch:
 - **Default low stock level** pre-fills the alert field when adding inventory.
 - **Show receipt after completing an order** is honoured by the POS.
 - **Paper width** is the default every new receipt opens with.
+
+### Data backup and restore
+
+Settings → Data Management provides a one-click JSON export and a reviewed import
+for moving a POS installation. The `pos-data-backup` v2 envelope includes the
+current app/database/schema versions, creation time, store list and explicit
+exclusion notes. The business payload currently covers restaurant profile/logo,
+menu items and prices, inventory, deals, orders and order lines, sales,
+customers, toppings, add-ons and application settings. This schema has no
+vendor store; no vendor records or fields are fabricated.
+
+Import is a **merge**, not a destructive restore: records are matched by stable
+ID, newer source records replace the matching local record, and records not in
+the file stay untouched. Unique order/sale conflicts are preflighted and the
+IndexedDB transaction is rolled back if a write fails. The UI previews counts
+and exclusions and requires explicit confirmation before import. Invalid or
+incompatible files are rejected before any transaction starts. Legacy v1
+backups are also accepted.
+
+Device-local administrator credentials and the sync transport queue are not
+portable: the former remain on the destination terminal, while the latter is
+transient delivery state rather than the business records being moved. These
+exclusions are shown in the UI and recorded in the backup metadata.
 
 ### License - honest scope
 
@@ -727,43 +751,47 @@ no driver rasterisation and no scaling.
 
 ### Print stylesheet
 
-`src/styles/print.css` strips every top-level subtree except the receipt with
-`display: none` (not `visibility`), so no empty leading page is produced.
-`printService` moves the receipt to be a direct child of `<body>` while
-printing, so no scrollable ancestor can clip a long receipt.
+The browser pipeline is `printService.ts` plus `src/styles/print.css`. Each
+receipt is cloned into a dedicated, receipt-only print iframe; it does not
+print the application viewport or rely on a scrollable Admin/POS ancestor. The
+print stylesheet hides all non-receipt content with `display: none`.
 
-**Page size:** `@page` is injected at print time with **two explicit lengths**,
-e.g. `@page { size: 58mm 97mm; margin: 0 }`. `size: 58mm auto` looks correct
-but is invalid CSS and browsers silently drop the whole descriptor, leaving
-the job on a Letter sheet with the receipt stranded in a corner. The height is
-measured from the rendered receipt, so the roll is exactly as long as the
-content and no trailing blank page is fed.
+**Content-sized media:** after fonts and receipt images settle, `printService`
+measures the selected receipt, rounds its height up to 0.1mm, adds only a
+0.6mm feed tail, and injects a valid two-length rule such as
+`@page { size: 58mm 97mm; margin: 0 }`. `size: 58mm auto` is invalid and can
+make browsers silently ignore the requested roll size. Printer drivers may
+still override CSS page size; choose the matching 58mm/80mm roll, zero margins
+and 100% scale in the system dialog when needed.
 
-**Print Both** prints two genuinely separate pages in one job: page 1 is the
-customer receipt, page 2 is the kitchen receipt. The customer clone carries a
-real `break-after: page` (plus the legacy `page-break-after: always`), and the
-`@page` height is sized to the **tallest single receipt** rather than the
-stack, so the browser puts each receipt on its own physical page instead of
-fitting both onto one sheet — no squashing, no duplicated or missing content,
-and no third or blank page. Customer-only and Kitchen-only prints are
-unchanged: one receipt, one page, sized to its content.
+**Print Both** creates two separate content-sized print jobs, customer first
+and kitchen second. This avoids sizing a short kitchen ticket to the taller
+customer receipt or placing both tickets on one shared page. The user may need
+to dismiss the first system print dialog before the second opens.
 
 ### ESC/POS
 
 `escpos.ts` lays text into the printer's fixed character grid: **32 columns at
-58mm, 48 at 80mm** (Font A). Amount columns are fixed width so a long product
-name can never push the total off the paper, over-long words are hard-split
-rather than dropped, and non-ASCII characters are transliterated because
-thermal printers use a single-byte code page.
+58mm, 48 at 80mm** (Font A). Amount columns are protected from long item names;
+wrapped text is retained rather than clipped. Text remains printer-native for
+crisp output, non-ASCII characters are transliterated for common single-byte
+code pages, and the existing profile logo is proportionally rasterized at
+printer-dot resolution. Customer and kitchen encoders are separate; “Send
+Both” emits two independently cut ticket streams. Each text line already ends
+in a line feed, so the final partial cut advances only one dot instead of
+feeding an extra full blank line.
 
 `printerService.ts` implements WebUSB and Web Serial transports behind one
 interface, so another transport (Bluetooth, a native bridge) can be added
-without touching the encoder.
+without touching the encoder. The printer panel can preview/download the exact
+encoded bytes before sending.
 
 **Not verified against hardware.** No thermal printer exists in the
-development environment, so the transport code is unexercised end to end. The
-byte encoding is unit-tested, and the printer panel can display and download
-the exact byte stream for checking against a real device.
+development environment, so physical text density, logo darkness, custom-page
+driver behavior and the end-to-end USB/Serial transports could not be checked.
+The isolated automated checks validate layout calculations, content-height
+rules, wrapped ticket text, encoder/cut commands, and mocked proportional logo
+raster dimensions; this is not a claim of successful physical printing.
 
 ## Receipts
 
@@ -792,22 +820,22 @@ printing billing information.
   the flexible column while quantity and money columns remain aligned.
 - Long names, addresses and notes wrap rather than clip or overflow; optional
   rows are omitted rather than rendered blank.
-- **No fixed height anywhere.** The sheet is as tall as its content, and the
-  printed page is measured from that rendered content (rounded up to 0.1mm,
-  plus a 0.6mm feed tail). One item prints a short slip; ten items grow the
-  slip by exactly the lines they add.
-- Paper is spent on **type, not whitespace**: sheet padding is 1.8mm, section
-  gaps are 0.2–0.7mm and separator margins 0.5mm, which is what pays for a
-  large base font (13.5px at 80mm, 11.5px at 58mm) with bold item names,
-  quantities, amounts and totals.
-- The logo is sized inside the printable width (42mm at 80mm, 33mm at 58mm),
-  keeps its aspect ratio, and adds to the receipt height only when it is
-  present — there is no reserved empty box, so a missing logo costs no paper.
-- Long names, addresses and notes wrap rather than clip or overflow; optional
-  rows are omitted rather than rendered blank.
-- Print output hides application chrome and removes page margins. ESC/POS direct
-  printing remains available as a separate path; physical thermal-printer
-  behavior is not verified in this environment.
+- **No fixed receipt height.** The sheet grows with its content. Browser print
+  measures the selected ticket, rounds up to 0.1mm and adds only a 0.6mm feed
+  tail. One item prints a short slip; additional wrapped lines add only the
+  height they need.
+- Paper is spent on **type, not whitespace**: compact 1.4–1.6mm vertical
+  padding and tight section gaps leave room for bold customer text (15px at
+  80mm, 13px at 58mm). Kitchen type is slightly smaller (14px / 12px) while
+  quantities and item names remain prominent.
+- The logo is proportionally bounded to 54×24mm at 80mm and 42×20mm at 58mm.
+  It contributes to height only when present — there is no reserved empty box.
+- Long names, prices, addresses and notes wrap rather than clip or overlap;
+  optional rows are omitted rather than rendered blank. Narrow receipt rows
+  use fixed quantity/price/amount columns while the name column takes the rest.
+- Browser printing uses one content-sized job per ticket; direct ESC/POS uses
+  crisp text, a raster logo and an independent cut per ticket. Neither path has
+  been physically verified on a thermal printer in this environment.
 - **Printing is read-only.** Building and printing a receipt only reads orders,
   items and the restaurant profile; it never writes, updates or deletes
   business data.
@@ -1045,17 +1073,30 @@ currency, locale, database name/version, storage availability, connection).
 
 ## v3.1.0 verification
 
-Current upgrade checks:
+Checks run for this change:
 
-- `npm ci` completed; `npm run typecheck` and `npm run build` passed.
-- Customer and kitchen receipt markup smoke checks passed for delivery context,
-  long item names, modifiers, notes, totals/payment, optional-field omission and
-  the no-price kitchen ticket.
-- ESC/POS output smoke checks passed at 58mm and 80mm for line width, delivery
-  details, modifiers and notes. The content-height helper was checked with
-  empty, short and tall receipt measurements.
-- Full browser/IndexedDB workflow regression and physical thermal-printer tests
-  were not run in this environment.
+- `npm ci`, `npm run typecheck`, `npm run build` and `npm test` passed. The
+  build still reports the existing Vite mixed static/dynamic-import warnings
+  for sync/settings modules.
+- `scripts/test-indexeddb.mjs` runs the real database and backup services
+  against isolated in-memory IndexedDB, checking the 12-store snapshot,
+  relationships, preview/exclusions, merge, monotonic order sequence, unique
+  conflict preflight, device-local data preservation and transaction rollback.
+- `scripts/test-data-port.mjs` additionally runs the backup core against an
+  isolated in-memory transactional adapter: 23 business records across 12
+  stores, IDs/relationships, logo and settings, merge/re-import, order sequence,
+  conflict rollback, invalid-version rejection and v1 compatibility.
+- `scripts/test-receipts.mjs` checks the authored 58mm/80mm typography/logo/
+  wrapping CSS rules, content-height measurement, explicit browser `@page`
+  dimensions, long printer-text wrapping, totals, kitchen privacy/content,
+  compact ESC/POS streams/cut bytes, and bounded proportional logo raster
+  dimensions with mocked canvas/image APIs. These are code-level checks, not a
+  rendered browser print preview.
+- A real browser/print-to-PDF run could not be completed: no browser binary is
+  installed, and the isolated Chromium download failed because the network
+  connection reset. No physical thermal printer is available either. The
+  tests above validate the pipeline's measurable rules/bytes, not printed
+  paper output. The import UI itself is not browser-driven in this environment.
 
 ## Archived baseline verification
 

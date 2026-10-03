@@ -114,9 +114,30 @@ async function transaction<T>(
     stores[name] = tx.objectStore(name);
   }
 
-  const result = await fn(stores);
-  await promisifyTransaction(tx);
-  return result;
+  // Attach completion handlers before invoking the callback. If any request or
+  // application-level check fails, abort the whole transaction and wait for
+  // its rollback before returning the error to the caller.
+  const completion = promisifyTransaction(tx);
+  // Requests can fail while the callback is still awaiting them. Observe the
+  // transaction promise immediately; the caller still awaits/rethrows below.
+  void completion.catch(() => {});
+  try {
+    const result = await fn(stores);
+    await completion;
+    return result;
+  } catch (error) {
+    try {
+      tx.abort();
+    } catch {
+      // It may already have auto-aborted after a failed IndexedDB request.
+    }
+    try {
+      await completion;
+    } catch {
+      // The original callback/request error is more useful to the caller.
+    }
+    throw error;
+  }
 }
 
 export const db = {

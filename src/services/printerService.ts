@@ -16,8 +16,12 @@
  *     because no printer is attached.
  */
 
-import type { ReceiptModel, ReceiptWidth } from './receiptService';
-import { encodeReceipt } from './escpos';
+import type {
+  KitchenReceiptModel,
+  ReceiptModel,
+  ReceiptWidth,
+} from './receiptService';
+import { encodeKitchenReceipt, encodeReceiptWithLogo } from './escpos';
 
 export type TransportKind = 'usb' | 'serial';
 
@@ -252,19 +256,47 @@ export const printerService = {
     await current.disconnect();
   },
 
-  /** Encode and send a receipt over the connected transport. */
+  /** Encode and send a customer receipt, including its saved logo when decodable. */
   async printReceipt(
     model: ReceiptModel,
     width: ReceiptWidth,
   ): Promise<void> {
-    if (!active) {
-      throw new Error('No printer connected.');
-    }
-    await active.write(encodeReceipt(model, width));
+    const transport = active;
+    if (!transport) throw new Error('No printer connected.');
+    const bytes = await encodeReceiptWithLogo(model, width);
+    await transport.write(bytes);
+  },
+
+  /** Send the compact kitchen ticket without prices or customer contact data. */
+  async printKitchenReceipt(
+    model: KitchenReceiptModel,
+    width: ReceiptWidth,
+  ): Promise<void> {
+    const transport = active;
+    if (!transport) throw new Error('No printer connected.');
+    await transport.write(encodeKitchenReceipt(model, width));
+  },
+
+  /** Send two independently cut, content-sized tickets over one connection. */
+  async printBothReceipts(
+    customer: ReceiptModel,
+    kitchen: KitchenReceiptModel,
+    width: ReceiptWidth,
+  ): Promise<void> {
+    const transport = active;
+    if (!transport) throw new Error('No printer connected.');
+    const customerBytes = await encodeReceiptWithLogo(customer, width);
+    const kitchenBytes = encodeKitchenReceipt(kitchen, width);
+    await transport.write(customerBytes);
+    await transport.write(kitchenBytes);
   },
 
   /** Bytes that would be sent, for inspection or saving to a file. */
-  encode(model: ReceiptModel, width: ReceiptWidth): Uint8Array {
-    return encodeReceipt(model, width);
+  encode(model: ReceiptModel, width: ReceiptWidth): Promise<Uint8Array> {
+    return encodeReceiptWithLogo(model, width);
+  },
+
+  encodeKitchen(model: KitchenReceiptModel, width: ReceiptWidth): Uint8Array {
+    return encodeKitchenReceipt(model, width);
   },
 };
