@@ -55,13 +55,10 @@ export function KitchenReceipt({ model, width }: KitchenReceiptProps) {
             <dd className={styles.metaValue}>{model.deliveryAddress}</dd>
           </div>
         ) : null}
+        {/* Date and time share one row: a kitchen ticket is paper, not a log. */}
         <div className={styles.metaRow}>
           <dt>Date</dt>
-          <dd className={styles.metaValue}>{model.date}</dd>
-        </div>
-        <div className={styles.metaRow}>
-          <dt>Time</dt>
-          <dd className={styles.metaValue}>{model.time}</dd>
+          <dd className={styles.metaValue}>{`${model.date} ${model.time}`}</dd>
         </div>
       </dl>
 

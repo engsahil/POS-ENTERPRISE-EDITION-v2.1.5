@@ -16,6 +16,7 @@ export type { ManageLinkSectionProps } from './ManageLinkSection';
 export { PrinterSection } from './PrinterSection';
 export { SecuritySection } from './SecuritySection';
 export { SettingsSection } from './SettingsSection';
+export { DataSection } from './DataSection';
 export { InstallSection } from './InstallSection';
 export { AboutSection } from './AboutSection';
 export { LegalDocumentView } from './LegalDocumentView';

@@ -151,8 +151,7 @@ export function renderPlainText(
   if (model.deliveryAddress) {
     for (const line of wrapText(`Address: ${model.deliveryAddress}`, cols)) out.push(line);
   }
-  out.push(twoColumns('Date', model.date, cols));
-  out.push(twoColumns('Time', model.time, cols));
+  out.push(twoColumns('Date', `${model.date} ${model.time}`, cols));
   out.push(divider);
 
   out.push(
@@ -298,8 +297,7 @@ export function encodeReceipt(
   if (model.deliveryAddress) {
     for (const wrapped of wrapText(`Address: ${model.deliveryAddress}`, cols)) line(wrapped);
   }
-  line(twoColumns('Date', model.date, cols));
-  line(twoColumns('Time', model.time, cols));
+  line(twoColumns('Date', `${model.date} ${model.time}`, cols));
   line('-'.repeat(cols));
 
   const c = itemColumns(cols);
