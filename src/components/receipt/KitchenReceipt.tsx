@@ -37,28 +37,10 @@ export function KitchenReceipt({ model, width }: KitchenReceiptProps) {
             <dd className={styles.metaValue}>{model.tableLabel}</dd>
           </div>
         ) : null}
-        {model.customerName ? (
-          <div className={styles.metaRow}>
-            <dt>Customer</dt>
-            <dd className={styles.metaValue}>{model.customerName}</dd>
-          </div>
-        ) : null}
-        {model.orderType === 'delivery' && model.customerPhone ? (
-          <div className={styles.metaRow}>
-            <dt>Phone</dt>
-            <dd className={styles.metaValue}>{model.customerPhone}</dd>
-          </div>
-        ) : null}
-        {model.orderType === 'delivery' && model.deliveryAddress ? (
-          <div className={styles.metaRow}>
-            <dt>Address</dt>
-            <dd className={styles.metaValue}>{model.deliveryAddress}</dd>
-          </div>
-        ) : null}
-        {/* Date and time share one row: a kitchen ticket is paper, not a log. */}
+        {/* The kitchen needs fulfilment context, not customer contact details. */}
         <div className={styles.metaRow}>
-          <dt>Date</dt>
-          <dd className={styles.metaValue}>{`${model.date} ${model.time}`}</dd>
+          <dt>Time</dt>
+          <dd className={styles.metaValue}>{model.time}</dd>
         </div>
       </dl>
 

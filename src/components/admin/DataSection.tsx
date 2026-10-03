@@ -3,24 +3,28 @@ import { Button } from '@/components/ui';
 import { DB_NAME, DB_VERSION } from '@/config/storage.config';
 import {
   dataPortService,
+  type BackupPreview,
   type ImportResult,
   type StorageSource,
 } from '@/services/dataPortService';
 import styles from './PanelSection.module.css';
 
+interface PendingImport {
+  fileName: string;
+  input: unknown;
+  preview: BackupPreview;
+}
+
 /**
- * Data source and portability.
- *
- * The point of this screen is to answer, without guesswork, "which data am I
- * looking at, and where is the rest of it?". This application has no server
- * database: records live in this browser under this exact address, so a new
- * deployment URL opens an empty database of its own. The export/restore pair
- * below moves records between addresses, additively.
+ * Data source and full business-data portability. The backup is a validated,
+ * versioned JSON snapshot of every business store declared by the live POS
+ * schema. Restores merge by stable record id and never clear existing data.
  */
 export function DataSection() {
   const [source, setSource] = useState<StorageSource | null>(null);
   const [exporting, setExporting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [pending, setPending] = useState<PendingImport | null>(null);
   const [result, setResult] = useState<ImportResult | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -38,13 +42,13 @@ export function DataSection() {
     setExporting(true);
     setFailure(null);
     setResult(null);
+    setPending(null);
     try {
       const backup = await dataPortService.exportBackup();
       const host = source?.origin
         ? source.origin.replace(/^https?:\/\//, '').replace(/[^a-z0-9.-]+/gi, '-')
         : 'terminal';
       const stamp = backup.exportedAt.slice(0, 10);
-
       const blob = new Blob([JSON.stringify(backup, null, 2)], {
         type: 'application/json',
       });
@@ -55,7 +59,8 @@ export function DataSection() {
       document.body.appendChild(link);
       link.click();
       link.remove();
-      URL.revokeObjectURL(url);
+      // Some mobile browsers begin the download after click() returns.
+      window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
     } catch (error) {
       setFailure(
         error instanceof Error ? error.message : 'Could not create the backup.',
@@ -65,22 +70,44 @@ export function DataSection() {
     }
   }
 
-  async function restore(file: File) {
+  async function inspectFile(file: File) {
+    setFailure(null);
+    setResult(null);
+    setPending(null);
+    try {
+      const input: unknown = JSON.parse(await file.text());
+      const preview = dataPortService.previewBackup(input);
+      setPending({ fileName: file.name, input, preview });
+    } catch (error) {
+      setFailure(
+        error instanceof Error
+          ? error.message
+          : 'Could not validate that backup file.',
+      );
+    } finally {
+      if (fileRef.current) fileRef.current.value = '';
+    }
+  }
+
+  async function confirmImport() {
+    if (!pending) return;
     setImporting(true);
     setFailure(null);
     setResult(null);
     try {
-      const parsed: unknown = JSON.parse(await file.text());
-      const outcome = await dataPortService.importBackup(parsed);
+      const outcome = await dataPortService.importBackup(pending.input);
       setResult(outcome);
+      setPending(null);
       refresh();
+      // All data-reading hooks get a clean read of the restored database.
+      // Keep the result visible briefly before reloading the authenticated app.
+      window.setTimeout(() => window.location.reload(), 1800);
     } catch (error) {
       setFailure(
-        error instanceof Error ? error.message : 'Could not read that file.',
+        error instanceof Error ? error.message : 'Could not import that backup.',
       );
     } finally {
       setImporting(false);
-      if (fileRef.current) fileRef.current.value = '';
     }
   }
 
@@ -107,12 +134,11 @@ export function DataSection() {
         </div>
 
         <p className={styles.hint}>
-          This terminal has no server database. Records are stored in this
-          browser, under this exact web address. A different address — another
-          deployment URL, localhost, or another device — has its own separate
-          copy, which is why a newly deployed address starts empty. Existing
-          data is not deleted when the address changes; it is still on the
-          device where it was entered.
+          This terminal stores its records in IndexedDB in this browser, under
+          this exact web address. A different address or device has a separate
+          database. Export a backup here before moving to another installation;
+          importing the file restores the business records without replacing
+          this terminal&apos;s administrator login.
         </p>
 
         <dl className={styles.details}>
@@ -150,7 +176,7 @@ export function DataSection() {
 
         {populated.length > 0 ? (
           <>
-            <p className={styles.hint}>Records by store:</p>
+            <p className={styles.hint}>Records by IndexedDB store:</p>
             <dl className={styles.details}>
               {populated.map(([store, count]) => (
                 <div className={styles.row} key={store}>
@@ -161,27 +187,30 @@ export function DataSection() {
             </dl>
           </>
         ) : (
-          <p className={styles.note}>
-            No records are stored at this address yet. If the data already
-            exists elsewhere, use Export on that address and Restore here.
-          </p>
+          <p className={styles.note}>No records are stored at this address yet.</p>
         )}
       </section>
 
       <section className={styles.card}>
-        <h3 className={styles.cardTitle}>Move data between addresses</h3>
+        <h3 className={styles.cardTitle}>Data management</h3>
         <p className={styles.hint}>
-          Export writes every record to a file. Restoring that file on another
-          address <strong>adds</strong> the records: it never clears a store,
-          never deletes a row and never resets the database. A record that
-          already exists here is only replaced when the file holds a newer
-          version of it; older copies are skipped. Login credentials are never
-          imported, so a restore cannot lock you out.
+          Export creates one portable JSON file containing the records from all
+          business stores in this POS schema: restaurant profile and logo, menu
+          products and variants, inventory, deals, orders and line items, sales,
+          customers, toppings, add-ons, delivery records and rider/settings
+          data. The export uses the real IndexedDB store list and refuses to
+          create a partial backup if the database schema does not match.
+        </p>
+        <p className={styles.hint}>
+          Administrator password hashes, active sessions and the sync transport
+          queue are not moved. This keeps sign-in local to each installation;
+          the queue is operational transport state, while its underlying POS
+          records are included.
         </p>
 
         <div className={styles.actions}>
-          <Button onClick={() => void downloadBackup()} disabled={exporting}>
-            {exporting ? 'Preparing…' : 'Export backup'}
+          <Button onClick={() => void downloadBackup()} disabled={exporting || importing}>
+            {exporting ? 'Preparing backup…' : 'Export All Data'}
           </Button>
 
           <input
@@ -191,29 +220,104 @@ export function DataSection() {
             style={{ display: 'none' }}
             onChange={(event) => {
               const file = event.target.files?.[0];
-              if (file) void restore(file);
+              if (file) void inspectFile(file);
             }}
           />
           <Button
             variant="secondary"
-            disabled={importing}
+            disabled={importing || exporting}
             onClick={() => fileRef.current?.click()}
           >
-            {importing ? 'Restoring…' : 'Restore from backup'}
+            Import Data
           </Button>
         </div>
 
+        {pending ? (
+          <div className={styles.note} role="group" aria-labelledby="backup-confirm-title">
+            <h4 id="backup-confirm-title">Review backup before importing</h4>
+            <p className={styles.confirmText}>
+              <strong>
+                Importing this backup will merge data into the current POS.
+                Existing data will not be deleted. Continue?
+              </strong>
+            </p>
+            <dl className={styles.details}>
+              <div className={styles.row}>
+                <dt className={styles.rowLabel}>File</dt>
+                <dd className={styles.rowValue}>{pending.fileName}</dd>
+              </div>
+              <div className={styles.row}>
+                <dt className={styles.rowLabel}>Exported</dt>
+                <dd className={styles.rowValue}>
+                  {new Date(pending.preview.exportedAt).toLocaleString()}
+                </dd>
+              </div>
+              <div className={styles.row}>
+                <dt className={styles.rowLabel}>Application</dt>
+                <dd className={styles.rowValue}>
+                  {pending.preview.applicationVersion}
+                  {pending.preview.legacy ? ' · legacy backup' : ''}
+                </dd>
+              </div>
+              <div className={styles.row}>
+                <dt className={styles.rowLabel}>Business records</dt>
+                <dd className={styles.rowValue}>{pending.preview.totalRecords}</dd>
+              </div>
+              <div className={styles.row}>
+                <dt className={styles.rowLabel}>Source address</dt>
+                <dd className={styles.rowValue}>{pending.preview.sourceOrigin}</dd>
+              </div>
+            </dl>
+            <p className={styles.confirmText}><strong>Records in this file:</strong></p>
+            <dl className={styles.details}>
+              {Object.entries(pending.preview.storeCounts).map(([store, count]) => (
+                <div className={styles.row} key={store}>
+                  <dt className={styles.rowLabel}>{store}</dt>
+                  <dd className={styles.rowValue}>{count}</dd>
+                </div>
+              ))}
+            </dl>
+            <p className={styles.confirmText}><strong>Not included:</strong></p>
+            <ul className={styles.confirmList}>
+              {Object.entries(pending.preview.excludedStores).map(([store, reason]) => (
+                <li key={store}><strong>{store}:</strong> {reason}</li>
+              ))}
+              <li>Active sign-in sessions stay on this terminal.</li>
+            </ul>
+            {pending.preview.excludedCredentialRecords > 0 ? (
+              <p className={styles.confirmText}>
+                {pending.preview.excludedCredentialRecords} legacy administrator record(s)
+                are present in this older file and will not be restored.
+              </p>
+            ) : null}
+            <p className={styles.confirmText}>
+              Records with matching IDs are updated only when the backup has a
+              newer timestamp. Duplicate/older records are skipped. A unique
+              order-number conflict stops the whole import before any writes.
+            </p>
+            <div className={styles.actions}>
+              <Button
+                variant="ghost"
+                disabled={importing}
+                onClick={() => setPending(null)}
+              >
+                Cancel
+              </Button>
+              <Button disabled={importing} onClick={() => void confirmImport()}>
+                {importing ? 'Importing…' : 'Import and merge data'}
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
         {result ? (
           <p className={styles.note} role="status">
-            Added {result.added}, updated {result.updated}, skipped{' '}
-            {result.skipped}
-            {result.skipped > 0
-              ? ' (already here, or newer locally).'
-              : '.'}
-            {result.failed.length > 0
-              ? ` Could not write: ${result.failed.join(', ')}.`
-              : ''}{' '}
-            Nothing was deleted.
+            Import complete: added {result.added}, updated {result.updated},
+            skipped {result.skipped}. Existing data was not deleted. The POS
+            will refresh to load the restored records.
+            {result.excludedCredentialRecords > 0
+              ? ` ${result.excludedCredentialRecords} legacy administrator credential record(s) were kept local.`
+              : ''}
           </p>
         ) : null}
 
@@ -222,19 +326,6 @@ export function DataSection() {
             {failure}
           </p>
         ) : null}
-      </section>
-
-      <section className={styles.card}>
-        <h3 className={styles.cardTitle}>Keeping one address</h3>
-        <p className={styles.hint}>
-          Data follows the address, so pick one production address and keep
-          using it: open the deployed app, install it, and use the installed
-          icon. Treat preview and deployment-specific URLs as temporary — they
-          are separate origins with their own separate data. This app is
-          offline-first, so day-to-day work never depends on the network; the
-          address only matters because that is where the browser keeps the
-          records.
-        </p>
       </section>
     </div>
   );

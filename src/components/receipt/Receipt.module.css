@@ -14,7 +14,7 @@
 .sheet {
   --paper: 80mm;
   --pad-x: 3mm;
-  --pad-y: 1.8mm;
+  --pad-y: 1.6mm;
 
   box-sizing: border-box;
   width: var(--paper);
@@ -24,8 +24,8 @@
   background-color: #ffffff;
   color: #000000;
   font-family: var(--font-mono);
-  font-size: 13.5px;
-  line-height: 1.24;
+  font-size: 15px;
+  line-height: 1.2;
   overflow-wrap: anywhere;
   word-break: break-word;
 }
@@ -33,16 +33,16 @@
 .w80 {
   --paper: 80mm;
   --pad-x: 3mm;
-  --pad-y: 1.8mm;
-  font-size: 13.5px;
+  --pad-y: 1.6mm;
+  font-size: 15px;
 }
 
 .w58 {
   --paper: 58mm;
   --pad-x: 2.4mm;
-  --pad-y: 1.6mm;
-  font-size: 11.5px;
-  line-height: 1.22;
+  --pad-y: 1.4mm;
+  font-size: 13px;
+  line-height: 1.18;
 }
 
 /* ---------- Customer header ---------- */
@@ -62,8 +62,8 @@
  */
 .logo {
   display: block;
-  max-width: 42mm;
-  max-height: 26mm;
+  max-width: 54mm;
+  max-height: 24mm;
   width: auto;
   height: auto;
   object-fit: contain;
@@ -71,8 +71,8 @@
 }
 
 .w58 .logo {
-  max-width: 33mm;
-  max-height: 21mm;
+  max-width: 42mm;
+  max-height: 20mm;
 }
 
 .name {
@@ -174,19 +174,21 @@
 }
 
 .colQty {
+  min-width: 0;
   text-align: center;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow-wrap: normal;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .colPrice,
 .colTotal {
+  min-width: 0;
   text-align: right;
   font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-  overflow-wrap: normal;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 /* The amount a line costs is what the customer looks for; the unit price is
@@ -239,14 +241,19 @@
 }
 
 .totalRow dt {
+  flex: 1;
   min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .totalRow dd {
-  flex-shrink: 0;
+  flex: 0 1 65%;
+  max-width: 65%;
+  min-width: 0;
   margin: 0;
   text-align: right;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
@@ -341,7 +348,7 @@
   list-style: none;
   margin: 0.3mm 0 0;
   padding-left: 9mm;
-  font-size: 0.91em;
+  font-size: 0.95em;
   overflow-wrap: anywhere;
 }
 

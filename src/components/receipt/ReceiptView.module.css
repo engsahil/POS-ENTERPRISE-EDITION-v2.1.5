@@ -12,6 +12,24 @@
   padding: var(--sp-4) 0;
 }
 
+.printStatus,
+.printError {
+  font-size: var(--fs-sm);
+  line-height: var(--lh-snug);
+  padding: var(--sp-3) var(--sp-4);
+  border-radius: var(--radius-md);
+}
+
+.printStatus {
+  color: var(--color-success);
+  background-color: var(--color-success-soft);
+}
+
+.printError {
+  color: var(--color-danger);
+  background-color: var(--color-danger-soft);
+}
+
 .toolbar {
   display: flex;
   align-items: center;

@@ -67,6 +67,12 @@
   border-radius: var(--radius-md);
 }
 
+.receiptTypes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

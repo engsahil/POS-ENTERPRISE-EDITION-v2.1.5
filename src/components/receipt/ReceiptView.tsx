@@ -28,6 +28,9 @@ export function ReceiptView({
 }: ReceiptViewProps) {
   const [width, setWidth] = useState<ReceiptWidth | null>(null);
   const [showPrinter, setShowPrinter] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  const [printError, setPrintError] = useState<string | null>(null);
+  const [printStatus, setPrintStatus] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'customer' | 'kitchen'>('customer');
   const customerRef = useRef<HTMLDivElement>(null);
   const kitchenRef = useRef<HTMLDivElement>(null);
@@ -69,60 +72,56 @@ export function ReceiptView({
 
   const currentRef = activeTab === 'customer' ? customerRef : kitchenRef;
 
-  /*
-   * Print both receipts in one job, as TWO genuinely separate pages.
-   *
-   * The two on-screen receipts are cloned into a single temporary container
-   * and handed to the same printService pipeline a single receipt uses.
-   * Two things make them land on separate physical pages:
-   *
-   *   1. The cloned customer receipt carries `break-after: page` (plus the
-   *      legacy `page-break-after: always`), so the print formatter starts
-   *      a new page after it.
-   *   2. printService is called with `paginate`, which sizes `@page` to the
-   *      tallest single receipt instead of the whole stack. With the old
-   *      stack-height page (or an invalid `size: <w> auto`, which browsers
-   *      drop entirely) both receipts were fitted onto ONE sheet.
-   *
-   * Result: page 1 = customer receipt, page 2 = kitchen receipt, nothing
-   * else. Customer-only and Kitchen-only prints are untouched.
-   */
-  function printBoth() {
-    const customerClone = customerRef.current?.firstElementChild?.cloneNode(
-      true,
-    ) as HTMLElement | null;
-    const kitchenClone = kitchenRef.current?.firstElementChild?.cloneNode(
-      true,
-    ) as HTMLElement | null;
+  function receiptElement(ref: React.RefObject<HTMLDivElement>): HTMLElement | null {
+    return ref.current?.querySelector<HTMLElement>('[data-receipt-width]') ?? null;
+  }
 
-    // Nothing to clone (preview not mounted): print the visible receipt.
-    if (!customerClone && !kitchenClone) {
-      printReceipt({ width: width as ReceiptWidth, container: currentRef.current });
+  async function printCurrent() {
+    setPrintError(null);
+    setPrintStatus(null);
+    setPrinting(true);
+    try {
+      await printReceipt({
+        width: width as ReceiptWidth,
+        container: receiptElement(currentRef),
+      });
+      setPrintStatus('Receipt print dialog closed. Confirm the selected printer accepted the job.');
+    } catch (error) {
+      setPrintError(error instanceof Error ? error.message : 'Could not print the receipt.');
+    } finally {
+      setPrinting(false);
+    }
+  }
+
+  /**
+   * Each receipt gets its own print document and its own measured page height.
+   * Putting both on one tall @page made the shorter kitchen ticket inherit the
+   * customer receipt's physical length; two separate jobs avoid that blank roll.
+   */
+  async function printBoth() {
+    const customer = receiptElement(customerRef);
+    const kitchenReceipt = receiptElement(kitchenRef);
+    if (!customer && !kitchenReceipt) {
+      await printCurrent();
       return;
     }
 
-    const container = document.createElement('div');
-    if (customerClone) container.appendChild(customerClone);
-
-    // Page break between the two receipts — only meaningful when both are
-    // present; with just one it would only produce a blank trailing page.
-    if (customerClone && kitchenClone) {
-      customerClone.style.breakAfter = 'page';
-      customerClone.style.pageBreakAfter = 'always';
+    setPrintError(null);
+    setPrintStatus(null);
+    setPrinting(true);
+    try {
+      if (customer) {
+        await printReceipt({ width: width as ReceiptWidth, container: customer });
+      }
+      if (kitchenReceipt) {
+        await printReceipt({ width: width as ReceiptWidth, container: kitchenReceipt });
+      }
+      setPrintStatus('Both print dialogs closed. Confirm the selected printer accepted both jobs.');
+    } catch (error) {
+      setPrintError(error instanceof Error ? error.message : 'Could not print both receipts.');
+    } finally {
+      setPrinting(false);
     }
-
-    if (kitchenClone) container.appendChild(kitchenClone);
-
-    // The container is temporary — remove it once the job has finished so
-    // nothing is left behind in the document for the next print.
-    const cleanup = () => {
-      container.remove();
-      window.removeEventListener('afterprint', cleanup);
-    };
-    window.addEventListener('afterprint', cleanup);
-    window.setTimeout(cleanup, 2000);
-
-    printReceipt({ width: width as ReceiptWidth, container, paginate: true });
   }
 
   return (
@@ -146,13 +145,15 @@ export function ReceiptView({
           <Button variant="secondary" onClick={() => setShowPrinter((v) => !v)} aria-expanded={showPrinter}>
             Thermal printer
           </Button>
-          <Button variant="secondary" onClick={() => printReceipt({ width: width as ReceiptWidth, container: currentRef.current })}>
-            {deliveryReceipt && activeTab === 'customer'
-              ? 'Print Delivery Receipt'
-              : `Print ${activeTab === 'customer' ? 'Customer' : 'Kitchen'}`}
+          <Button variant="secondary" disabled={printing} onClick={() => void printCurrent()}>
+            {printing
+              ? 'Printing…'
+              : deliveryReceipt && activeTab === 'customer'
+                ? 'Print Delivery Receipt'
+                : `Print ${activeTab === 'customer' ? 'Customer' : 'Kitchen'}`}
           </Button>
-          <Button variant="secondary" onClick={printBoth}>
-            Print Both
+          <Button variant="secondary" disabled={printing} onClick={() => void printBoth()}>
+            {printing ? 'Printing…' : 'Print Both (2 jobs)'}
           </Button>
           {actions}
         </div>
@@ -183,9 +184,21 @@ export function ReceiptView({
         </span>
       </div>
 
+      {printStatus ? (
+        <p className={styles.printStatus} role="status">{printStatus}</p>
+      ) : null}
+      {printError ? (
+        <p className={styles.printError} role="alert">{printError}</p>
+      ) : null}
+
       {showPrinter ? (
         <div data-print-hide>
-          <PrintPanel model={model} width={width} onClose={() => setShowPrinter(false)} />
+          <PrintPanel
+            model={model}
+            kitchenModel={kitchen}
+            width={width}
+            onClose={() => setShowPrinter(false)}
+          />
         </div>
       ) : null}
 

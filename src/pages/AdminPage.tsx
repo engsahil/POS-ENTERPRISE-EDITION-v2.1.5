@@ -4,7 +4,6 @@ import {
   AboutSection,
   AdminNav,
   DashboardSection,
-  DataSection,
   InstallSection,
   ManageLinkSection,
   PrinterSection,
@@ -36,7 +35,6 @@ const SECTIONS: AdminSection[] = [
   { id: 'install', label: 'Install' },
   { id: 'security', label: 'Security' },
   { id: 'settings', label: 'Settings' },
-  { id: 'data', label: 'Data' },
   { id: 'about', label: 'About' },
 ];
 
@@ -149,7 +147,6 @@ export default function AdminPage() {
     toppings: <ToppingsSection />,
     addons: <AddOnsSection />,
     settings: <SettingsSection onOpenAbout={() => setActive('about')} />,
-    data: <DataSection />,
     about: <AboutSection />,
   };
 

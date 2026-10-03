@@ -1,43 +1,33 @@
 /**
- * Browser printing for thermal receipts.
+ * Browser printing for 58mm and 80mm thermal receipts.
  *
- * Drives the browser's own print pipeline (window.print). This is genuinely
- * different from speaking ESC/POS to a printer directly:
+ * Printing the application viewport (or appending a receipt into its
+ * full-height document) lets the browser/driver inherit A4/Letter or viewport
+ * dimensions. Instead, every job is rendered in a dedicated, receipt-only
+ * iframe. Its CSS page is set to the physical paper width and the measured
+ * content height, so no application shell, scroll container, or viewport
+ * height can become part of the printed page.
  *
- *   - Browser printing renders the receipt as a PAGE and hands it to the OS
- *     print system, which rasterises it for the printer driver. It depends on
- *     the user picking the right printer and paper size in the OS dialog, and
- *     the browser may still apply its own scaling or margins.
- *   - ESC/POS (see escpos.ts) sends command BYTES straight to the device with
- *     no dialog, no driver rasterisation and no scaling.
- *
- * Both are supported. Neither is a substitute for the other.
+ * This still depends on the browser/printer driver accepting CSS custom page
+ * sizes. For printers whose driver forces a fixed roll length, direct ESC/POS
+ * printing is the reliable content-feed-and-cut path.
  */
 
 import type { ReceiptWidth } from './receiptService';
 
 const PAGE_STYLE_ID = 'thermal-page-size';
-
-/** Millimetres per CSS pixel at 96dpi. */
+const FRAME_TITLE = 'Thermal receipt print document';
 const MM_PER_PX = 25.4 / 96;
-
-/**
- * Feed left after the last line of content, in millimetres.
- *
- * The page is rounded to 0.1mm, so this is the whole of the tail: enough that
- * no rasteriser rounding can shave the final line, small enough that the roll
- * visibly ends just below the footer.
- */
 const FEED_TAIL_MM = 0.6;
+const PRINT_COMPLETION_FALLBACK_MS = 30_000;
+const IMAGE_LOAD_FALLBACK_MS = 5_000;
 
-/**
- * Measured height of the receipt in millimetres, rounded UP to 0.1mm.
- *
- * Rounding up is what makes the page never shorter than its content, so the
- * tail can stay as small as it is. No minimum receipt length is imposed: a
- * one-line order prints a one-line-length slip, and a twenty-line order grows
- * on its own. There is no fixed height anywhere in the receipt layout.
- */
+const WIDTH_MM: Record<ReceiptWidth, number> = {
+  '58mm': 58,
+  '80mm': 80,
+};
+
+/** Measured receipt height, rounded up to 0.1mm plus only a small safe tail. */
 export function measureHeightMm(element: HTMLElement | null): number {
   if (!element) return 1;
   const px = Math.max(element.scrollHeight, element.getBoundingClientRect().height);
@@ -45,106 +35,215 @@ export function measureHeightMm(element: HTMLElement | null): number {
   return Math.max(1, Math.round((contentMm + FEED_TAIL_MM) * 10) / 10);
 }
 
-/**
- * Inject an `@page` rule matching the paper.
- *
- * Both page dimensions must be explicit lengths. `size: <width> auto` looks
- * reasonable but is INVALID CSS: browsers silently drop the whole descriptor,
- * leaving the print job on the default Letter/A4 sheet with the receipt
- * stranded in a corner. Verified against Chromium's CSSOM, which reports
- * `@page { margin: 0px }` for the `auto` form and keeps `size` only when two
- * lengths are given.
- *
- * The height is therefore measured from the rendered receipt, which also
- * keeps the roll exactly as long as the content: no trailing blank page.
- */
-export function applyPageSize(width: ReceiptWidth, heightMm: number): void {
-  const existing = document.getElementById(PAGE_STYLE_ID);
-  if (existing) existing.remove();
+/** Inject a valid, explicit two-dimension thermal page into the print document. */
+export function applyPageSize(
+  width: ReceiptWidth,
+  heightMm: number,
+  targetDocument: Document = document,
+): void {
+  targetDocument.getElementById(PAGE_STYLE_ID)?.remove();
 
-  const style = document.createElement('style');
+  const safeHeight = Number.isFinite(heightMm) ? Math.max(1, heightMm) : 1;
+  const style = targetDocument.createElement('style');
   style.id = PAGE_STYLE_ID;
   style.media = 'print';
-  style.textContent = `@page { size: ${width} ${heightMm}mm; margin: 0; }`;
-  document.head.appendChild(style);
+  style.textContent = `@page { size: ${width} ${safeHeight}mm; margin: 0; }`;
+  targetDocument.head.appendChild(style);
 }
 
-export function clearPageSize(): void {
-  document.getElementById(PAGE_STYLE_ID)?.remove();
+function createFrame(width: ReceiptWidth): HTMLIFrameElement {
+  const frame = document.createElement('iframe');
+  frame.title = FRAME_TITLE;
+  frame.setAttribute('aria-hidden', 'true');
+  frame.tabIndex = -1;
+  frame.style.position = 'fixed';
+  frame.style.left = '-10000px';
+  frame.style.top = '0';
+  frame.style.width = `${Math.ceil(WIDTH_MM[width] / MM_PER_PX)}px`;
+  // The frame viewport itself is deliberately tiny; only the receipt's
+  // measured document is paginated. There is no large iframe/page height.
+  frame.style.height = '1px';
+  frame.style.border = '0';
+  frame.style.padding = '0';
+  frame.style.margin = '0';
+  frame.style.overflow = 'hidden';
+  document.body.appendChild(frame);
+
+  const printDocument = frame.contentDocument;
+  if (!printDocument) {
+    frame.remove();
+    throw new Error('The browser could not create a receipt print document.');
+  }
+
+  printDocument.open();
+  printDocument.write(
+    '<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"></head><body></body></html>',
+  );
+  printDocument.close();
+  return frame;
 }
 
-export interface PrintOptions {
-  width: ReceiptWidth;
-  /** Element containing the receipt(s) to print. */
-  container: HTMLElement | null;
-  /**
-   * Print the container's children as separate pages instead of one sheet.
-   *
-   * Used by "Print Both": the page height is then the tallest single
-   * receipt (each `[data-receipt-width]` child), not the whole stack, so
-   * the browser places the first receipt on page 1 and the second — after
-   * an explicit `break-after: page` set by the caller — on page 2, with no
-   * squashing onto one physical page and no third page.
-   */
-  paginate?: boolean;
+function waitForStylesheet(link: HTMLLinkElement): Promise<void> {
+  return new Promise((resolve) => {
+    let timer = 0;
+    const finish = () => {
+      window.clearTimeout(timer);
+      link.removeEventListener('load', finish);
+      link.removeEventListener('error', finish);
+      resolve();
+    };
+    link.addEventListener('load', finish, { once: true });
+    link.addEventListener('error', finish, { once: true });
+    timer = window.setTimeout(finish, IMAGE_LOAD_FALLBACK_MS);
+  });
+}
+
+async function copyApplicationStyles(printDocument: Document): Promise<void> {
+  const pending: Promise<void>[] = [];
+  const sourceNodes = Array.from(
+    document.head.querySelectorAll<HTMLStyleElement | HTMLLinkElement>(
+      'style, link[rel~="stylesheet"]',
+    ),
+  );
+
+  for (const source of sourceNodes) {
+    if (source.id === PAGE_STYLE_ID) continue;
+
+    if (source instanceof HTMLStyleElement) {
+      printDocument.head.appendChild(source.cloneNode(true));
+      continue;
+    }
+
+    const link = source.cloneNode(true) as HTMLLinkElement;
+    // Resolve relative Vite/base-path asset URLs against the running app.
+    link.href = source.href;
+    // Styles are also needed for the pre-print content measurement. Their
+    // own @media print rules remain scoped exactly as authored.
+    link.media = 'all';
+    const loaded = waitForStylesheet(link);
+    printDocument.head.appendChild(link);
+    pending.push(loaded);
+  }
+
+  await Promise.all(pending);
+  if (printDocument.fonts?.ready) {
+    await printDocument.fonts.ready;
+  }
+}
+
+async function settleImages(root: HTMLElement): Promise<void> {
+  const images = Array.from(root.querySelectorAll('img'));
+  await Promise.all(
+    images.map(
+      (image) =>
+        new Promise<void>((resolve) => {
+          let timer = 0;
+          let settled = false;
+          const finish = () => {
+            if (settled) return;
+            settled = true;
+            window.clearTimeout(timer);
+            image.removeEventListener('load', finish);
+            image.removeEventListener('error', finish);
+            if (image.naturalWidth === 0) image.remove();
+            resolve();
+          };
+
+          image.addEventListener('load', finish, { once: true });
+          image.addEventListener('error', finish, { once: true });
+          timer = window.setTimeout(finish, IMAGE_LOAD_FALLBACK_MS);
+          if (image.complete) finish();
+        }),
+    ),
+  );
+
+  await Promise.all(
+    Array.from(root.querySelectorAll('img')).map(async (image) => {
+      if (typeof image.decode !== 'function') return;
+      try {
+        await image.decode();
+      } catch {
+        image.remove();
+      }
+    }),
+  );
+}
+
+function waitForPrintCompletion(printWindow: Window): Promise<void> {
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer = 0;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      window.clearTimeout(timer);
+      printWindow.removeEventListener('afterprint', finish);
+      resolve();
+    };
+
+    printWindow.addEventListener('afterprint', finish, { once: true });
+    timer = window.setTimeout(finish, PRINT_COMPLETION_FALLBACK_MS);
+  });
 }
 
 /**
- * Print the receipt.
- *
- * The container is marked `print-root`, which the print stylesheet uses to
- * strip every other top-level subtree from the printed flow. The element is
- * temporarily moved to be a direct child of <body> so that no scrollable or
- * clipping ancestor can truncate a long receipt to one screen height.
+ * Print one receipt in its own dynamically sized page/document. A missing
+ * receipt is an error, never a request to print the whole application page.
  */
-export function printReceipt({ width, container, paginate }: PrintOptions): void {
+export async function printReceipt({
+  width,
+  container,
+}: {
+  width: ReceiptWidth;
+  container: HTMLElement | null;
+}): Promise<void> {
   if (!container) {
-    window.print();
-    return;
+    throw new Error('The receipt is not ready to print. Reopen it and try again.');
   }
 
-  const parent = container.parentElement;
-  const marker = document.createComment('receipt-print-placeholder');
-
-  // Remember where it came from so the UI is restored exactly.
-  if (parent) parent.insertBefore(marker, container);
-
-  container.classList.add('print-root');
-  document.body.appendChild(container);
-
-  // Measure AFTER re-parenting: the container is now free of any scrollable
-  // ancestor, so scrollHeight reflects the full receipt rather than one
-  // screenful. With `paginate`, every receipt child is measured on its own
-  // and the tallest one sizes the page.
-  let heightMm = measureHeightMm(container);
-  if (paginate) {
-    const receipts = Array.from(
-      container.querySelectorAll<HTMLElement>('[data-receipt-width]'),
-    );
-    if (receipts.length > 0) {
-      heightMm = Math.max(...receipts.map((receipt) => measureHeightMm(receipt)));
-    }
+  const frame = createFrame(width);
+  const printDocument = frame.contentDocument;
+  const printWindow = frame.contentWindow;
+  if (!printDocument || !printWindow) {
+    frame.remove();
+    throw new Error('The browser could not open the receipt print document.');
   }
-  applyPageSize(width, heightMm);
 
-  const restore = () => {
-    container.classList.remove('print-root');
-    if (parent && marker.parentNode) {
-      parent.insertBefore(container, marker);
-      marker.remove();
-    }
-    clearPageSize();
-    window.removeEventListener('afterprint', restore);
-  };
-
-  window.addEventListener('afterprint', restore);
-
+  let keepFrameUntilAfterPrint = false;
   try {
-    window.print();
+    await copyApplicationStyles(printDocument);
+
+    const root = printDocument.createElement('div');
+    root.className = 'print-root';
+    const clone = container.cloneNode(true) as HTMLElement;
+    // A receipt clone can originate from a non-active preview tab. Printing
+    // the selected node must not inherit that tab's inline display:none.
+    clone.style.setProperty('display', 'block', 'important');
+    root.appendChild(clone);
+    printDocument.body.appendChild(root);
+
+    await settleImages(root);
+    // Let the copied stylesheet and final decoded image dimensions settle
+    // before measuring. The only height in the print document is content.
+    await new Promise<void>((resolve) => window.setTimeout(resolve, 50));
+
+    const receipt =
+      clone.matches('[data-receipt-width]')
+        ? clone
+        : clone.querySelector<HTMLElement>('[data-receipt-width]');
+    const heightMm = measureHeightMm(receipt ?? root);
+    applyPageSize(width, heightMm, printDocument);
+
+    const completed = waitForPrintCompletion(printWindow);
+    printWindow.focus();
+    printWindow.print();
+    keepFrameUntilAfterPrint = true;
+
+    await completed;
   } finally {
-    // Chrome fires afterprint reliably; this covers browsers that do not.
-    window.setTimeout(() => {
-      if (container.classList.contains('print-root')) restore();
-    }, 1000);
+    // The timeout in waitForPrintCompletion is a fallback for browsers that
+    // omit afterprint. Do not remove the frame while a print dialog is open.
+    if (!keepFrameUntilAfterPrint) frame.remove();
+    else window.setTimeout(() => frame.remove(), 0);
   }
 }

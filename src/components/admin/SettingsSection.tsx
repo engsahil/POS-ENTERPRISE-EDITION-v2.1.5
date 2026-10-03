@@ -3,6 +3,7 @@ import { Button, Input } from '@/components/ui';
 import { APP_CONFIG, CURRENCY } from '@/config/app.config';
 import { VENDOR } from '@/content/legal';
 import { SETTING_KEYS, settingsService } from '@/services/settingsService';
+import { DataSection } from './DataSection';
 import styles from './PanelSection.module.css';
 
 /**
@@ -151,6 +152,8 @@ export function SettingsSection({ onOpenAbout }: SettingsSectionProps = {}) {
           </div>
         </dl>
       </section>
+
+      <DataSection />
 
       <section className={styles.card}>
         <h3 className={styles.cardTitle}>About &amp; legal</h3>

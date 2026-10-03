@@ -5,24 +5,30 @@ import {
   type TransportKind,
   type TransportSupport,
 } from '@/services/printerService';
-import { renderPlainText } from '@/services/escpos';
-import type { ReceiptModel, ReceiptWidth } from '@/services/receiptService';
+import {
+  renderKitchenPlainText,
+  renderPlainText,
+} from '@/services/escpos';
+import type {
+  KitchenReceiptModel,
+  ReceiptModel,
+  ReceiptWidth,
+} from '@/services/receiptService';
 import styles from './PrintPanel.module.css';
 
 export interface PrintPanelProps {
   model: ReceiptModel;
+  kitchenModel?: KitchenReceiptModel;
   width: ReceiptWidth;
   onClose: () => void;
 }
 
 /**
- * Direct-printer controls.
- *
- * Deliberately separate from the browser Print button, and worded so the two
- * are not confused: browser printing goes through the OS dialog and driver;
- * this sends ESC/POS bytes straight to the device.
+ * Direct-printer controls. ESC/POS sends only receipt lines and a short cut
+ * command; it never creates a paper page. Customer and kitchen tickets are
+ * separately encoded and cut at their own content length.
  */
-export function PrintPanel({ model, width, onClose }: PrintPanelProps) {
+export function PrintPanel({ model, kitchenModel, width, onClose }: PrintPanelProps) {
   const [support, setSupport] = useState<TransportSupport | null>(null);
   const [status, setStatus] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -31,13 +37,46 @@ export function PrintPanel({ model, width, onClose }: PrintPanelProps) {
     printerService.activeTransport()?.label ?? null,
   );
   const [preview, setPreview] = useState(false);
+  const [receiptType, setReceiptType] = useState<'customer' | 'kitchen'>('customer');
+  const [bytes, setBytes] = useState<Uint8Array | null>(null);
+  const [encoding, setEncoding] = useState(false);
 
   useEffect(() => {
     setSupport(printerService.detectSupport());
   }, []);
 
-  const bytes = printerService.encode(model, width);
-  const plain = renderPlainText(model, width);
+  useEffect(() => {
+    let active = true;
+    setEncoding(true);
+    setBytes(null);
+    setError(null);
+    const output =
+      receiptType === 'kitchen' && kitchenModel
+        ? Promise.resolve(printerService.encodeKitchen(kitchenModel, width))
+        : printerService.encode(model, width);
+
+    void output
+      .then((encoded) => {
+        if (active) setBytes(encoded);
+      })
+      .catch((err: unknown) => {
+        if (active) {
+          setError(err instanceof Error ? err.message : 'Could not prepare printer output.');
+        }
+      })
+      .finally(() => {
+        if (active) setEncoding(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [kitchenModel, model, receiptType, width]);
+
+  const plain =
+    receiptType === 'kitchen' && kitchenModel
+      ? renderKitchenPlainText(kitchenModel, width)
+      : renderPlainText(model, width);
 
   async function connect(kind: TransportKind) {
     setBusy(true);
@@ -48,23 +87,29 @@ export function PrintPanel({ model, width, onClose }: PrintPanelProps) {
       setConnected(transport.label);
       setStatus(`Connected to ${transport.label}.`);
     } catch (err) {
-      // A user cancelling the device picker is not an error worth shouting about.
       const message = err instanceof Error ? err.message : String(err);
-      setError(/No device selected|cancelled/i.test(message)
-        ? 'No printer was selected.'
-        : message);
+      setError(
+        /No device selected|cancelled/i.test(message)
+          ? 'No printer was selected.'
+          : message,
+      );
     } finally {
       setBusy(false);
     }
   }
 
-  async function send() {
+  async function sendSelected() {
     setBusy(true);
     setError(null);
     setStatus(null);
     try {
-      await printerService.printReceipt(model, width);
-      setStatus('Receipt sent to the printer.');
+      if (receiptType === 'kitchen' && kitchenModel) {
+        await printerService.printKitchenReceipt(kitchenModel, width);
+        setStatus('Compact kitchen ticket sent; it ends with its own cut command.');
+      } else {
+        await printerService.printReceipt(model, width);
+        setStatus('Customer receipt sent with the saved logo when available.');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not send to printer.');
     } finally {
@@ -72,21 +117,37 @@ export function PrintPanel({ model, width, onClose }: PrintPanelProps) {
     }
   }
 
+  async function sendBoth() {
+    if (!kitchenModel) return;
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    try {
+      await printerService.printBothReceipts(model, kitchenModel, width);
+      setStatus('Customer and kitchen tickets sent as two independently cut receipts.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not send both receipts.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
   function download() {
-    // Copy into a plain ArrayBuffer so the Blob accepts it.
+    if (!bytes) return;
     const buffer = new ArrayBuffer(bytes.byteLength);
     new Uint8Array(buffer).set(bytes);
     const blob = new Blob([buffer], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `receipt-${model.orderNumber}-${width}.bin`;
+    a.download = `${receiptType}-receipt-${model.orderNumber}-${width}.bin`;
     a.click();
-    URL.revokeObjectURL(url);
+    window.setTimeout(() => URL.revokeObjectURL(url), 10_000);
   }
 
   const usbUsable = support?.usb && support.secureContext;
   const serialUsable = support?.serial && support.secureContext;
+  const selectedLabel = receiptType === 'customer' ? 'Customer receipt' : 'Kitchen ticket';
 
   return (
     <section className={styles.panel} aria-label="Direct printer">
@@ -98,17 +159,17 @@ export function PrintPanel({ model, width, onClose }: PrintPanelProps) {
       </header>
 
       <p className={styles.explain}>
-        Sends ESC/POS commands straight to the printer, with no operating
-        system print dialog. This is a different path from the{' '}
-        <strong>Print</strong> button, which uses the browser and the
-        printer&apos;s driver.
+        Sends printer-native ESC/POS bytes directly to the device. Text stays
+        crisp, the customer logo is converted at printer dot resolution, and
+        each ticket is cut immediately after its own content. This is separate
+        from the browser Print button and its printer-driver page settings.
       </p>
 
       <dl className={styles.support}>
         <div className={styles.supportRow}>
           <dt>Paper</dt>
           <dd>
-            {width} &middot; {width === '58mm' ? 32 : 48} columns
+            {width} · {width === '58mm' ? 32 : 48} columns
           </dd>
         </div>
         <div className={styles.supportRow}>
@@ -138,8 +199,27 @@ export function PrintPanel({ model, width, onClose }: PrintPanelProps) {
         <p className={styles.note}>
           This browser does not expose WebUSB or Web Serial. Chrome or Edge on
           desktop is required for direct printing; the browser Print button
-          works everywhere.
+          works elsewhere.
         </p>
+      ) : null}
+
+      {kitchenModel ? (
+        <div className={styles.receiptTypes} role="group" aria-label="Direct receipt type">
+          <Button
+            variant={receiptType === 'customer' ? 'primary' : 'secondary'}
+            aria-pressed={receiptType === 'customer'}
+            onClick={() => setReceiptType('customer')}
+          >
+            Customer
+          </Button>
+          <Button
+            variant={receiptType === 'kitchen' ? 'primary' : 'secondary'}
+            aria-pressed={receiptType === 'kitchen'}
+            onClick={() => setReceiptType('kitchen')}
+          >
+            Kitchen
+          </Button>
+        </div>
       ) : null}
 
       <div className={styles.actions}>
@@ -157,9 +237,14 @@ export function PrintPanel({ model, width, onClose }: PrintPanelProps) {
         >
           Connect Serial
         </Button>
-        <Button onClick={() => void send()} disabled={busy || !connected}>
-          {busy ? 'Sending' : 'Send to printer'}
+        <Button onClick={() => void sendSelected()} disabled={busy || !connected}>
+          {busy ? 'Sending…' : `Send ${receiptType === 'customer' ? 'customer' : 'kitchen'} ticket`}
         </Button>
+        {kitchenModel ? (
+          <Button onClick={() => void sendBoth()} disabled={busy || !connected}>
+            Send Both (2 cuts)
+          </Button>
+        ) : null}
       </div>
 
       {status ? (
@@ -177,21 +262,21 @@ export function PrintPanel({ model, width, onClose }: PrintPanelProps) {
         <Button
           variant="ghost"
           size="sm"
-          onClick={() => setPreview((v) => !v)}
+          onClick={() => setPreview((value) => !value)}
           aria-expanded={preview}
         >
-          {preview ? 'Hide' : 'Show'} printer output
+          {preview ? 'Hide' : 'Show'} {selectedLabel.toLowerCase()} output
         </Button>
-        <Button variant="ghost" size="sm" onClick={download}>
-          Download .bin ({bytes.length} bytes)
+        <Button variant="ghost" size="sm" onClick={download} disabled={!bytes || encoding}>
+          {encoding ? 'Preparing printer output…' : `Download .bin (${bytes?.length ?? 0} bytes)`}
         </Button>
       </div>
 
       {preview ? (
         <div className={styles.previewWrap}>
           <p className={styles.previewLabel}>
-            Exactly what the printer will render, at {width === '58mm' ? 32 : 48}{' '}
-            columns:
+            {selectedLabel} text at {width === '58mm' ? 32 : 48} columns. The
+            customer logo is included as a raster command when it can be decoded.
           </p>
           <pre className={styles.preview} data-testid="escpos-preview">
             {plain}
