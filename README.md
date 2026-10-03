@@ -116,6 +116,42 @@ All data lives in IndexedDB (`pos-db`, version 6) so the terminal keeps working
 without a network connection. There is no demo data — the database starts
 completely empty apart from the admin account created on first sign-in.
 
+**There is no server database.** No `DATABASE_URL`, no ORM, no connection
+string, and no backend is involved in storing or reading records. Vercel (or
+any other static host) only serves this application's files; the records stay
+in the browser.
+
+### Data is kept per address (origin)
+
+Because the database is browser storage, it is partitioned by **origin** —
+scheme + host + port:
+
+| Address | Database |
+| --- | --- |
+| `https://pos.example.com` | its own `pos-db` |
+| `https://pos-abc123.vercel.app` | a different, separate `pos-db` |
+| `http://localhost:5173` | another separate `pos-db` |
+| a file downloaded and opened locally | yet another |
+
+**This is why a newly opened deployment can look empty while an older copy
+still shows the client's data.** The deployment did not lose anything and
+nothing was deleted: the records are still in the browser profile of the device
+and address where they were entered. A new address simply opens a new, empty
+database of its own.
+
+Practical consequences:
+
+- Keep using **one** production address. Deployment-specific preview URLs are
+  temporary origins and must not be treated as the terminal.
+- Installing the app (see Install) keeps the address stable and requests
+  persistent storage so the browser will not evict it.
+- To move existing records to a new address, use **Admin → Data**: Export on
+  the address that has the data, then Restore on the address that needs it.
+  Restore is a **merge** — it only ever writes, never clears or resets.
+- A genuinely shared, multi-device database needs the optional sync backend
+  (`VITE_SYNC_API_URL`, see Synchronisation). Until it is configured, every
+  address is standalone by design.
+
 ### Stores
 
 | Store | Contents |
@@ -442,8 +478,9 @@ signature verification outright is marked invalid.
 
 ## Admin panel
 
-**Admin** is a single screen with nine sections in a keyboard-navigable rail
-(arrow keys, Home/End). The open section is remembered for the session.
+**Admin** is a single screen with one section per concern in a
+keyboard-navigable rail (arrow keys, Home/End). The open section is remembered
+for the session.
 
 | Section | Contents |
 | --- | --- |
@@ -454,6 +491,7 @@ signature verification outright is marked invalid.
 | Security | Change admin username and password |
 | License | Local licence record |
 | Settings | Order number prefix, default low stock level, receipt behaviour |
+| Data | Which address and database this terminal is reading, record counts, and the export/restore bridge for moving records between addresses |
 
 Menu, Inventory and Deals already own full screens, so Admin **links to them
 rather than duplicating the UI** - one implementation each, no risk of two
@@ -736,9 +774,9 @@ as the default for the next receipt. Customer and kitchen receipts can be
 printed separately or together.
 
 Customer receipts show the saved restaurant name, logo, contact details and
-receipt info when available; readable order type, number, date and time; item
-name/size/quantity/prices and modifiers; totals/payment; and saved order, item
-and delivery notes. Delivery receipts additionally show the customer's phone,
+receipt info when available; readable order type, number, and date with time on
+one row; item name/size/quantity/prices and modifiers; totals/payment; and
+saved order, item and delivery notes. Delivery receipts additionally show the customer's phone,
 delivery address and instructions when present. The customer logo is reused
 from the existing restaurant profile, keeps its aspect ratio and is omitted
 cleanly when absent or unavailable.
@@ -754,11 +792,25 @@ printing billing information.
   the flexible column while quantity and money columns remain aligned.
 - Long names, addresses and notes wrap rather than clip or overflow; optional
   rows are omitted rather than rendered blank.
-- Browser print height is measured from the rendered receipt content with a
-  small safety tail, so short orders do not feed a long fixed blank page.
+- **No fixed height anywhere.** The sheet is as tall as its content, and the
+  printed page is measured from that rendered content (rounded up to 0.1mm,
+  plus a 0.6mm feed tail). One item prints a short slip; ten items grow the
+  slip by exactly the lines they add.
+- Paper is spent on **type, not whitespace**: sheet padding is 1.8mm, section
+  gaps are 0.2–0.7mm and separator margins 0.5mm, which is what pays for a
+  large base font (13.5px at 80mm, 11.5px at 58mm) with bold item names,
+  quantities, amounts and totals.
+- The logo is sized inside the printable width (42mm at 80mm, 33mm at 58mm),
+  keeps its aspect ratio, and adds to the receipt height only when it is
+  present — there is no reserved empty box, so a missing logo costs no paper.
+- Long names, addresses and notes wrap rather than clip or overflow; optional
+  rows are omitted rather than rendered blank.
 - Print output hides application chrome and removes page margins. ESC/POS direct
   printing remains available as a separate path; physical thermal-printer
   behavior is not verified in this environment.
+- **Printing is read-only.** Building and printing a receipt only reads orders,
+  items and the restaurant profile; it never writes, updates or deletes
+  business data.
 
 ## Deals
 

@@ -95,13 +95,13 @@ export function Receipt({ model, width }: ReceiptProps) {
             <dd className={styles.metaValue}>{model.deliveryAddress}</dd>
           </div>
         ) : null}
+        {/*
+          Date and time share one row. Two rows for two halves of the same
+          timestamp is a whole extra line of paper on every single ticket.
+        */}
         <div className={styles.metaRow}>
           <dt>Date</dt>
-          <dd className={styles.metaValue}>{model.date}</dd>
-        </div>
-        <div className={styles.metaRow}>
-          <dt>Time</dt>
-          <dd className={styles.metaValue}>{model.time}</dd>
+          <dd className={styles.metaValue}>{`${model.date} ${model.time}`}</dd>
         </div>
       </dl>
 

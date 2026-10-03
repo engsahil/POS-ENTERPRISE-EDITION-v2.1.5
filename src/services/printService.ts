@@ -22,15 +22,27 @@ const PAGE_STYLE_ID = 'thermal-page-size';
 const MM_PER_PX = 25.4 / 96;
 
 /**
- * Measured height of the receipt in millimetres, rounded up.
+ * Feed left after the last line of content, in millimetres.
  *
- * A 1mm safety tail prevents the last line being shaved by rounding. No
- * minimum receipt length is imposed: short orders stay short.
+ * The page is rounded to 0.1mm, so this is the whole of the tail: enough that
+ * no rasteriser rounding can shave the final line, small enough that the roll
+ * visibly ends just below the footer.
+ */
+const FEED_TAIL_MM = 0.6;
+
+/**
+ * Measured height of the receipt in millimetres, rounded UP to 0.1mm.
+ *
+ * Rounding up is what makes the page never shorter than its content, so the
+ * tail can stay as small as it is. No minimum receipt length is imposed: a
+ * one-line order prints a one-line-length slip, and a twenty-line order grows
+ * on its own. There is no fixed height anywhere in the receipt layout.
  */
 export function measureHeightMm(element: HTMLElement | null): number {
   if (!element) return 1;
   const px = Math.max(element.scrollHeight, element.getBoundingClientRect().height);
-  return Math.max(1, Math.ceil(px * MM_PER_PX) + 1);
+  const contentMm = Math.ceil(px * MM_PER_PX * 10) / 10;
+  return Math.max(1, Math.round((contentMm + FEED_TAIL_MM) * 10) / 10);
 }
 
 /**
